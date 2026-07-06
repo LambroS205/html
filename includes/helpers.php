@@ -1,0 +1,141 @@
+<?php
+/**
+ * Helper Functions - BestBuy Store
+ * Các hàm tiện ích dùng chung trên toàn bộ website
+ */
+
+/**
+ * Render star rating dạng HTML
+ * Dùng filled/empty stars thay vì icon library → không phụ thuộc bên ngoài
+ *
+ * @param float $rating   Điểm đánh giá 0-5
+ * @param int   $reviewCount Số lượt đánh giá
+ * @return string HTML
+ */
+function renderStars(float $rating, int $reviewCount = 0): string
+{
+    $html = '<div class="flex items-center gap-1">';
+    $html .= '<div class="flex text-sm">';
+
+    for ($i = 1; $i <= 5; $i++) {
+        if ($i <= round($rating)) {
+            $html .= '<span class="text-yellow-400">★</span>';
+        } else {
+            $html .= '<span class="text-gray-300">★</span>';
+        }
+    }
+
+    $html .= '</div>';
+    if ($reviewCount > 0) {
+        $html .= '<span class="text-xs text-gray-400">(' . number_format($reviewCount) . ')</span>';
+    }
+    $html .= '</div>';
+
+    return $html;
+}
+
+/**
+ * Format giá tiền USD
+ */
+function formatPrice(float $price): string
+{
+    return '$' . number_format($price, 2);
+}
+
+/**
+ * Tính phần trăm giảm giá
+ */
+function calcDiscount(float $originalPrice, float $salePrice): int
+{
+    if ($originalPrice <= 0) return 0;
+    return (int) round(($originalPrice - $salePrice) / $originalPrice * 100);
+}
+
+/**
+ * Lấy đường dẫn ảnh sản phẩm có fallback
+ * Nếu file ảnh không tồn tại, trả về empty string (template sẽ hiển thị icon thay thế)
+ */
+function getProductImage(?string $imagePath): string
+{
+    if (empty($imagePath)) return '';
+    
+    $fullPath = $_SERVER['DOCUMENT_ROOT'] . '/' . ltrim($imagePath, '/');
+    if (file_exists($fullPath)) {
+        return '/' . ltrim($imagePath, '/');
+    }
+    return '';
+}
+
+/**
+ * Render một product card HTML
+ * Tách ra function riêng vì dùng lại ở index.php, search.php
+ *
+ * @param array $product Dữ liệu sản phẩm từ DB (JOIN categories)
+ * @return string HTML
+ */
+function renderProductCard(array $product): string
+{
+    $name      = htmlspecialchars($product['name']);
+    $slug      = htmlspecialchars($product['slug']);
+    $price     = (float) $product['price'];
+    $salePrice = $product['sale_price'] ? (float) $product['sale_price'] : null;
+    $rating    = (float) $product['rating'];
+    $reviews   = (int) $product['review_count'];
+    $stock     = (int) $product['stock'];
+    $catName   = htmlspecialchars($product['category_name'] ?? '');
+    $catIcon   = $product['category_icon'] ?? '📦';
+    $image     = getProductImage($product['image'] ?? '');
+    $displayPrice = $salePrice ?? $price;
+
+    $discountBadge = '';
+    if ($salePrice && $salePrice < $price) {
+        $pct = calcDiscount($price, $salePrice);
+        $discountBadge = '<span class="absolute top-3 left-3 bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-md shadow-lg z-10">-' . $pct . '%</span>';
+    }
+
+    $stockBadge = '';
+    if ($stock <= 0) {
+        $stockBadge = '<span class="absolute top-3 right-3 bg-gray-700 text-white text-xs font-semibold px-2.5 py-1 rounded-md z-10">Hết hàng</span>';
+    } elseif ($stock <= 10) {
+        $stockBadge = '<span class="absolute top-3 right-3 bg-orange-500 text-white text-xs font-semibold px-2.5 py-1 rounded-md z-10">Còn ' . $stock . '</span>';
+    }
+
+    $imageHtml = $image
+        ? '<img src="' . htmlspecialchars($image) . '" alt="' . $name . '" class="w-full h-full object-contain p-6 group-hover:scale-110 transition-transform duration-500" loading="lazy">'
+        : '<span class="text-6xl opacity-60 group-hover:scale-110 transition-transform duration-500">' . $catIcon . '</span>';
+
+    $priceHtml = $salePrice
+        ? '<span class="text-lg font-bold text-bb-blue">' . formatPrice($salePrice) . '</span>
+           <span class="text-sm text-gray-400 line-through ml-1">' . formatPrice($price) . '</span>'
+        : '<span class="text-lg font-bold text-bb-blue">' . formatPrice($price) . '</span>';
+
+    $stars = renderStars($rating, $reviews);
+
+    $addToCartBtn = $stock > 0
+        ? '<button onclick="addToCartQuick(' . (int)$product['id'] . ', this)" class="w-full bg-bb-yellow text-bb-dark font-semibold py-2.5 rounded-lg hover:bg-yellow-300 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2">
+               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"></path></svg>
+               Thêm vào giỏ
+           </button>'
+        : '<button disabled class="w-full bg-gray-200 text-gray-500 font-semibold py-2.5 rounded-lg cursor-not-allowed">Hết hàng</button>';
+
+    return '
+    <div class="product-card bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 group border border-gray-100 flex flex-col">
+        <!-- Image -->
+        <a href="/product.php?slug=' . $slug . '" class="relative overflow-hidden aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+            ' . $discountBadge . $stockBadge . '
+            ' . $imageHtml . '
+        </a>
+        <!-- Info -->
+        <div class="p-4 flex flex-col flex-1">
+            <p class="text-xs text-gray-400 mb-1 uppercase tracking-wide">' . $catIcon . ' ' . $catName . '</p>
+            <a href="/product.php?slug=' . $slug . '" class="font-semibold text-sm text-gray-800 mb-2 line-clamp-2 min-h-[2.5rem] hover:text-bb-blue transition-colors">' . $name . '</a>
+            ' . $stars . '
+            <div class="flex items-baseline gap-1 mt-2 mb-3">
+                ' . $priceHtml . '
+            </div>
+            <div class="mt-auto">
+                ' . $addToCartBtn . '
+            </div>
+        </div>
+    </div>';
+}
