@@ -1,0 +1,691 @@
+<?php
+/**
+ * Trang Thanh toán - BestBuy Store
+ * 
+ * Flow:
+ *  1. GET  → Hiển thị form nhập thông tin + tóm tắt đơn hàng
+ *  2. POST → Server-side validation → DB Transaction → Trang cảm ơn
+ * 
+ * Logic:
+ *  - Validate cả client-side (JS) và server-side (PHP)
+ *  - Sử dụng PDO Transaction: INSERT orders → INSERT order_items → COMMIT
+ *  - Clear cart session sau khi đặt hàng thành công
+ *  - Generate mã đơn hàng BB-XXXXXX
+ */
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/helpers.php';
+
+$pdo = Database::getConnection();
+
+// ── Kiểm tra giỏ hàng ──
+$cartItems = $_SESSION['cart'] ?? [];
+if (empty($cartItems) && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Location: /cart.php');
+    exit;
+}
+
+// ── Biến lưu trạng thái ──
+$errors       = [];
+$formData     = [];
+$orderSuccess = false;
+$orderCode    = '';
+$orderTotal   = 0;
+
+// ═══════════════════════════════════════
+// XỬ LÝ POST — Đặt hàng
+// ═══════════════════════════════════════
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    // ── Thu thập dữ liệu form ──
+    $formData = [
+        'customer_name'  => trim($_POST['customer_name'] ?? ''),
+        'customer_email' => trim($_POST['customer_email'] ?? ''),
+        'customer_phone' => trim($_POST['customer_phone'] ?? ''),
+        'shipping_address' => trim($_POST['shipping_address'] ?? ''),
+        'payment_method' => trim($_POST['payment_method'] ?? ''),
+    ];
+
+    // ══════════════════════════════════
+    // SERVER-SIDE VALIDATION
+    // ══════════════════════════════════
+
+    // Họ tên
+    if (empty($formData['customer_name'])) {
+        $errors['customer_name'] = 'Vui lòng nhập họ tên';
+    } elseif (mb_strlen($formData['customer_name']) < 2) {
+        $errors['customer_name'] = 'Họ tên phải có ít nhất 2 ký tự';
+    } elseif (mb_strlen($formData['customer_name']) > 100) {
+        $errors['customer_name'] = 'Họ tên không được quá 100 ký tự';
+    }
+
+    // Email
+    if (empty($formData['customer_email'])) {
+        $errors['customer_email'] = 'Vui lòng nhập email';
+    } elseif (!filter_var($formData['customer_email'], FILTER_VALIDATE_EMAIL)) {
+        $errors['customer_email'] = 'Email không hợp lệ';
+    }
+
+    // Số điện thoại
+    if (empty($formData['customer_phone'])) {
+        $errors['customer_phone'] = 'Vui lòng nhập số điện thoại';
+    } elseif (!preg_match('/^[0-9+\-\s()]{8,20}$/', $formData['customer_phone'])) {
+        $errors['customer_phone'] = 'Số điện thoại không hợp lệ (8-20 ký tự số)';
+    }
+
+    // Địa chỉ
+    if (empty($formData['shipping_address'])) {
+        $errors['shipping_address'] = 'Vui lòng nhập địa chỉ giao hàng';
+    } elseif (mb_strlen($formData['shipping_address']) < 10) {
+        $errors['shipping_address'] = 'Địa chỉ phải có ít nhất 10 ký tự';
+    }
+
+    // Phương thức thanh toán
+    if (!in_array($formData['payment_method'], ['cod', 'card'])) {
+        $errors['payment_method'] = 'Vui lòng chọn phương thức thanh toán';
+    }
+
+    // Kiểm tra giỏ hàng còn items không
+    if (empty($cartItems)) {
+        $errors['cart'] = 'Giỏ hàng trống. Vui lòng thêm sản phẩm trước khi thanh toán.';
+    }
+
+    // ══════════════════════════════════
+    // NẾU KHÔNG CÓ LỖI → XỬ LÝ ĐƠN HÀNG
+    // ══════════════════════════════════
+    if (empty($errors)) {
+        try {
+            // ── Tính toán tổng tiền ──
+            $subtotal = 0;
+            foreach ($cartItems as $item) {
+                $subtotal += (float) $item['price'] * (int) $item['quantity'];
+            }
+
+            $freeShippingThreshold = 35.00;
+            $shippingFee = ($subtotal >= $freeShippingThreshold) ? 0 : 5.00;
+            $vat = round($subtotal * 0.10, 2);    // VAT 10%
+            $total = $subtotal + $shippingFee + $vat;
+
+            // ── Generate mã đơn hàng ──
+            $orderCode = 'BB-' . strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 6));
+
+            // ══════════════════════════════════
+            // DATABASE TRANSACTION
+            // Lý do dùng Transaction:
+            //   Đảm bảo cả orders + order_items được insert đồng thời
+            //   Nếu bất kỳ query nào fail → rollback toàn bộ → dữ liệu nhất quán
+            // ══════════════════════════════════
+            $pdo->beginTransaction();
+
+            // 1. Insert vào bảng orders
+            $orderStmt = $pdo->prepare("
+                INSERT INTO orders (order_code, customer_name, customer_email, customer_phone, 
+                                    shipping_address, payment_method, subtotal, shipping_fee, tax, total, status)
+                VALUES (:order_code, :name, :email, :phone, :address, :payment, :subtotal, :shipping, :tax, :total, 'pending')
+            ");
+            $orderStmt->execute([
+                ':order_code' => $orderCode,
+                ':name'       => $formData['customer_name'],
+                ':email'      => $formData['customer_email'],
+                ':phone'      => $formData['customer_phone'],
+                ':address'    => $formData['shipping_address'],
+                ':payment'    => $formData['payment_method'],
+                ':subtotal'   => $subtotal,
+                ':shipping'   => $shippingFee,
+                ':tax'        => $vat,
+                ':total'      => $total,
+            ]);
+
+            $orderId = (int) $pdo->lastInsertId();
+
+            // 2. Insert từng item vào bảng order_items
+            $itemStmt = $pdo->prepare("
+                INSERT INTO order_items (order_id, product_id, product_name, price, quantity)
+                VALUES (:order_id, :product_id, :product_name, :price, :quantity)
+            ");
+
+            foreach ($cartItems as $item) {
+                $itemStmt->execute([
+                    ':order_id'     => $orderId,
+                    ':product_id'   => (int) $item['product_id'],
+                    ':product_name' => $item['name'],
+                    ':price'        => (float) $item['price'],
+                    ':quantity'     => (int) $item['quantity'],
+                ]);
+            }
+
+            // 3. COMMIT transaction
+            $pdo->commit();
+
+            // 4. Clear cart session
+            $_SESSION['cart'] = [];
+
+            $orderSuccess = true;
+            $orderTotal   = $total;
+
+        } catch (Exception $e) {
+            // Rollback nếu có lỗi
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $errors['system'] = 'Lỗi hệ thống khi xử lý đơn hàng. Vui lòng thử lại. (' . $e->getMessage() . ')';
+        }
+    }
+}
+
+// ── Tính tổng cho hiển thị form ──
+$subtotal = 0;
+$totalItems = 0;
+foreach ($cartItems as $item) {
+    $subtotal += (float) $item['price'] * (int) $item['quantity'];
+    $totalItems += (int) $item['quantity'];
+}
+$freeShippingThreshold = 35.00;
+$shippingFee = ($subtotal >= $freeShippingThreshold || $subtotal == 0) ? 0 : 5.00;
+$vat = round($subtotal * 0.10, 2);
+$total = $subtotal + $shippingFee + $vat;
+
+$pageTitle = $orderSuccess ? 'Đặt hàng thành công — BestBuy' : 'Thanh toán — BestBuy Store';
+$pageDescription = 'Hoàn tất đơn hàng tại BestBuy Store.';
+
+require_once __DIR__ . '/includes/header.php';
+?>
+
+    <div class="max-w-7xl mx-auto px-4 py-6">
+
+        <!-- Breadcrumb -->
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-6">
+            <a href="/" class="hover:text-bb-blue transition-colors">Trang chủ</a>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            <a href="/cart.php" class="hover:text-bb-blue transition-colors">Giỏ hàng</a>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            <span class="text-gray-600 font-medium"><?= $orderSuccess ? 'Đặt hàng thành công' : 'Thanh toán' ?></span>
+        </nav>
+
+        <?php if ($orderSuccess): ?>
+        <!-- ═══════════════════════════════════════
+             THANK YOU PAGE — Đặt hàng thành công
+             ═══════════════════════════════════════ -->
+        <div class="max-w-2xl mx-auto">
+            <div class="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden">
+                <!-- Header -->
+                <div class="bg-gradient-to-r from-green-500 to-emerald-600 p-8 text-center text-white">
+                    <div class="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
+                        <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    </div>
+                    <h1 class="text-2xl md:text-3xl font-bold mb-2">Đặt hàng thành công!</h1>
+                    <p class="text-green-100">Cảm ơn bạn đã mua sắm tại BestBuy Store</p>
+                </div>
+
+                <!-- Order details -->
+                <div class="p-8">
+                    <!-- Order code -->
+                    <div class="bg-gray-50 rounded-2xl p-5 text-center mb-6">
+                        <p class="text-sm text-gray-400 mb-1">Mã đơn hàng của bạn</p>
+                        <p class="text-3xl font-black text-bb-blue tracking-wider"><?= htmlspecialchars($orderCode) ?></p>
+                        <p class="text-xs text-gray-400 mt-2">Vui lòng lưu lại mã này để theo dõi đơn hàng</p>
+                    </div>
+
+                    <!-- Info summary -->
+                    <div class="space-y-3 mb-6">
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">Khách hàng</span>
+                            <span class="font-medium text-gray-700"><?= htmlspecialchars($formData['customer_name']) ?></span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">Email</span>
+                            <span class="font-medium text-gray-700"><?= htmlspecialchars($formData['customer_email']) ?></span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">Điện thoại</span>
+                            <span class="font-medium text-gray-700"><?= htmlspecialchars($formData['customer_phone']) ?></span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">Địa chỉ</span>
+                            <span class="font-medium text-gray-700 text-right max-w-[60%]"><?= htmlspecialchars($formData['shipping_address']) ?></span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">Thanh toán</span>
+                            <span class="font-medium text-gray-700">
+                                <?= $formData['payment_method'] === 'cod' ? '💵 Thanh toán khi nhận hàng (COD)' : '💳 Thẻ quốc tế' ?>
+                            </span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">Trạng thái</span>
+                            <span class="inline-flex items-center gap-1.5 text-orange-600 font-semibold">
+                                <span class="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
+                                Đang xử lý
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Total -->
+                    <div class="border-t border-gray-100 pt-4">
+                        <div class="flex justify-between items-baseline">
+                            <span class="font-bold text-gray-800">Tổng thanh toán</span>
+                            <span class="text-2xl font-black text-bb-blue"><?= formatPrice($orderTotal) ?></span>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="flex flex-col sm:flex-row gap-3 mt-8">
+                        <a href="/" class="flex-1 text-center bg-bb-yellow text-bb-dark font-bold py-3.5 rounded-xl hover:bg-yellow-300 transition-all">
+                            ← Tiếp tục mua sắm
+                        </a>
+                        <a href="/admin/orders.php" class="flex-1 text-center border-2 border-gray-200 text-gray-600 font-semibold py-3.5 rounded-xl hover:bg-gray-50 transition-all">
+                            📋 Xem đơn hàng (Admin)
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <?php else: ?>
+        <!-- ═══════════════════════════════════════
+             CHECKOUT FORM
+             ═══════════════════════════════════════ -->
+
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+            <svg class="w-8 h-8 text-bb-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+            Thanh toán
+        </h1>
+
+        <!-- Checkout steps indicator -->
+        <div class="flex items-center gap-2 mb-8 text-sm">
+            <span class="flex items-center gap-1.5 text-green-600 font-medium">
+                <span class="w-6 h-6 bg-green-600 text-white rounded-full flex items-center justify-center text-xs font-bold">✓</span>
+                Giỏ hàng
+            </span>
+            <div class="w-8 h-px bg-gray-300"></div>
+            <span class="flex items-center gap-1.5 text-bb-blue font-semibold">
+                <span class="w-6 h-6 bg-bb-blue text-white rounded-full flex items-center justify-center text-xs font-bold">2</span>
+                Thanh toán
+            </span>
+            <div class="w-8 h-px bg-gray-300"></div>
+            <span class="flex items-center gap-1.5 text-gray-400">
+                <span class="w-6 h-6 bg-gray-200 text-gray-400 rounded-full flex items-center justify-center text-xs font-bold">3</span>
+                Hoàn tất
+            </span>
+        </div>
+
+        <!-- System error -->
+        <?php if (isset($errors['system'])): ?>
+            <div class="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 mb-6 flex items-start gap-3">
+                <svg class="w-5 h-5 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>
+                <span class="text-sm"><?= htmlspecialchars($errors['system']) ?></span>
+            </div>
+        <?php endif; ?>
+
+        <form method="POST" action="/checkout.php" id="checkout-form" novalidate>
+            <div class="flex flex-col lg:flex-row gap-8">
+
+                <!-- ── LEFT: Customer Info Form ── -->
+                <div class="flex-1 space-y-6">
+
+                    <!-- Thông tin khách hàng -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        <h2 class="text-lg font-bold text-gray-900 mb-5 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-bb-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                            Thông tin khách hàng
+                        </h2>
+
+                        <div class="space-y-4">
+                            <!-- Họ tên -->
+                            <div>
+                                <label for="customer_name" class="block text-sm font-medium text-gray-700 mb-1.5">
+                                    Họ và tên <span class="text-red-500">*</span>
+                                </label>
+                                <input type="text" id="customer_name" name="customer_name" required
+                                       value="<?= htmlspecialchars($formData['customer_name'] ?? '') ?>"
+                                       placeholder="Nguyễn Văn A"
+                                       class="w-full px-4 py-3 rounded-xl border-2 <?= isset($errors['customer_name']) ? 'border-red-400 bg-red-50' : 'border-gray-200' ?> focus:border-bb-blue focus:ring-2 focus:ring-bb-blue/10 outline-none transition-all text-sm">
+                                <?php if (isset($errors['customer_name'])): ?>
+                                    <p class="text-red-500 text-xs mt-1.5 flex items-center gap-1">
+                                        <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                                        <?= htmlspecialchars($errors['customer_name']) ?>
+                                    </p>
+                                <?php endif; ?>
+                            </div>
+
+                            <!-- Email & Phone -->
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="customer_email" class="block text-sm font-medium text-gray-700 mb-1.5">
+                                        Email <span class="text-red-500">*</span>
+                                    </label>
+                                    <input type="email" id="customer_email" name="customer_email" required
+                                           value="<?= htmlspecialchars($formData['customer_email'] ?? '') ?>"
+                                           placeholder="email@example.com"
+                                           class="w-full px-4 py-3 rounded-xl border-2 <?= isset($errors['customer_email']) ? 'border-red-400 bg-red-50' : 'border-gray-200' ?> focus:border-bb-blue focus:ring-2 focus:ring-bb-blue/10 outline-none transition-all text-sm">
+                                    <?php if (isset($errors['customer_email'])): ?>
+                                        <p class="text-red-500 text-xs mt-1.5 flex items-center gap-1">
+                                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                                            <?= htmlspecialchars($errors['customer_email']) ?>
+                                        </p>
+                                    <?php endif; ?>
+                                </div>
+                                <div>
+                                    <label for="customer_phone" class="block text-sm font-medium text-gray-700 mb-1.5">
+                                        Số điện thoại <span class="text-red-500">*</span>
+                                    </label>
+                                    <input type="tel" id="customer_phone" name="customer_phone" required
+                                           value="<?= htmlspecialchars($formData['customer_phone'] ?? '') ?>"
+                                           placeholder="0901 234 567"
+                                           class="w-full px-4 py-3 rounded-xl border-2 <?= isset($errors['customer_phone']) ? 'border-red-400 bg-red-50' : 'border-gray-200' ?> focus:border-bb-blue focus:ring-2 focus:ring-bb-blue/10 outline-none transition-all text-sm">
+                                    <?php if (isset($errors['customer_phone'])): ?>
+                                        <p class="text-red-500 text-xs mt-1.5 flex items-center gap-1">
+                                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                                            <?= htmlspecialchars($errors['customer_phone']) ?>
+                                        </p>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Địa chỉ giao hàng -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        <h2 class="text-lg font-bold text-gray-900 mb-5 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-bb-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                            Địa chỉ giao hàng
+                        </h2>
+                        <div>
+                            <label for="shipping_address" class="block text-sm font-medium text-gray-700 mb-1.5">
+                                Địa chỉ đầy đủ <span class="text-red-500">*</span>
+                            </label>
+                            <textarea id="shipping_address" name="shipping_address" rows="3" required
+                                      placeholder="Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành phố"
+                                      class="w-full px-4 py-3 rounded-xl border-2 <?= isset($errors['shipping_address']) ? 'border-red-400 bg-red-50' : 'border-gray-200' ?> focus:border-bb-blue focus:ring-2 focus:ring-bb-blue/10 outline-none transition-all text-sm resize-none"><?= htmlspecialchars($formData['shipping_address'] ?? '') ?></textarea>
+                            <?php if (isset($errors['shipping_address'])): ?>
+                                <p class="text-red-500 text-xs mt-1.5 flex items-center gap-1">
+                                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                                    <?= htmlspecialchars($errors['shipping_address']) ?>
+                                </p>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <!-- Phương thức thanh toán -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        <h2 class="text-lg font-bold text-gray-900 mb-5 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-bb-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+                            Phương thức thanh toán
+                        </h2>
+
+                        <?php if (isset($errors['payment_method'])): ?>
+                            <p class="text-red-500 text-xs mb-3 flex items-center gap-1">
+                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                                <?= htmlspecialchars($errors['payment_method']) ?>
+                            </p>
+                        <?php endif; ?>
+
+                        <div class="space-y-3">
+                            <!-- COD -->
+                            <label class="payment-option flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all hover:border-bb-blue/30 <?= ($formData['payment_method'] ?? '') === 'cod' ? 'border-bb-blue bg-blue-50/50' : 'border-gray-200' ?>">
+                                <input type="radio" name="payment_method" value="cod" 
+                                       <?= ($formData['payment_method'] ?? 'cod') === 'cod' ? 'checked' : '' ?>
+                                       class="w-5 h-5 text-bb-blue focus:ring-bb-blue"
+                                       onchange="updatePaymentUI()">
+                                <div class="flex-1">
+                                    <span class="text-2xl">💵</span>
+                                    <p class="font-semibold text-gray-800 text-sm">Thanh toán khi nhận hàng (COD)</p>
+                                    <p class="text-xs text-gray-400 mt-0.5">Trả tiền mặt cho nhân viên giao hàng</p>
+                                </div>
+                            </label>
+
+                            <!-- Card -->
+                            <label class="payment-option flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all hover:border-bb-blue/30 <?= ($formData['payment_method'] ?? '') === 'card' ? 'border-bb-blue bg-blue-50/50' : 'border-gray-200' ?>">
+                                <input type="radio" name="payment_method" value="card"
+                                       <?= ($formData['payment_method'] ?? '') === 'card' ? 'checked' : '' ?>
+                                       class="w-5 h-5 text-bb-blue focus:ring-bb-blue"
+                                       onchange="updatePaymentUI()">
+                                <div class="flex-1">
+                                    <span class="text-2xl">💳</span>
+                                    <p class="font-semibold text-gray-800 text-sm">Thẻ quốc tế (Visa / Mastercard)</p>
+                                    <p class="text-xs text-gray-400 mt-0.5">Thanh toán an toàn qua cổng bảo mật</p>
+                                </div>
+                            </label>
+                        </div>
+
+                        <!-- Card form (hiện khi chọn card) -->
+                        <div id="card-form" class="mt-4 p-4 bg-gray-50 rounded-xl space-y-3 <?= ($formData['payment_method'] ?? '') !== 'card' ? 'hidden' : '' ?>">
+                            <p class="text-xs text-gray-500 mb-2 flex items-center gap-1">
+                                <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"></path></svg>
+                                Giao dịch được mã hóa SSL an toàn (Demo — không xử lý thẻ thật)
+                            </p>
+                            <input type="text" placeholder="Số thẻ: 4242 4242 4242 4242" maxlength="19"
+                                   class="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:border-bb-blue outline-none">
+                            <div class="grid grid-cols-2 gap-3">
+                                <input type="text" placeholder="MM/YY" maxlength="5"
+                                       class="px-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:border-bb-blue outline-none">
+                                <input type="text" placeholder="CVV" maxlength="4"
+                                       class="px-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:border-bb-blue outline-none">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── RIGHT: Order Summary ── -->
+                <div class="w-full lg:w-96 shrink-0">
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sticky top-24">
+                        <h3 class="font-bold text-gray-900 text-lg mb-5">Tóm tắt đơn hàng</h3>
+
+                        <!-- Cart items mini list -->
+                        <div class="space-y-3 mb-5 max-h-60 overflow-y-auto">
+                            <?php foreach ($cartItems as $item):
+                                $itemImage = getProductImage($item['image'] ?? '');
+                            ?>
+                            <div class="flex items-center gap-3">
+                                <div class="w-14 h-14 bg-gray-50 rounded-lg flex items-center justify-center shrink-0 border border-gray-100 overflow-hidden">
+                                    <?php if ($itemImage): ?>
+                                        <img src="<?= htmlspecialchars($itemImage) ?>" alt="" class="w-full h-full object-contain p-1" loading="lazy">
+                                    <?php else: ?>
+                                        <span class="text-xl opacity-50">📦</span>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-medium text-gray-800 line-clamp-1"><?= htmlspecialchars($item['name']) ?></p>
+                                    <p class="text-xs text-gray-400">SL: <?= (int) $item['quantity'] ?></p>
+                                </div>
+                                <span class="text-sm font-semibold text-gray-700 whitespace-nowrap">
+                                    <?= formatPrice((float) $item['price'] * (int) $item['quantity']) ?>
+                                </span>
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
+
+                        <hr class="border-gray-100 mb-4">
+
+                        <!-- Totals -->
+                        <div class="space-y-2.5 text-sm">
+                            <div class="flex justify-between text-gray-600">
+                                <span>Tạm tính (<?= $totalItems ?> SP)</span>
+                                <span class="font-medium"><?= formatPrice($subtotal) ?></span>
+                            </div>
+                            <div class="flex justify-between text-gray-600">
+                                <span>Phí vận chuyển</span>
+                                <span class="font-medium <?= $shippingFee == 0 ? 'text-green-600' : '' ?>">
+                                    <?= $shippingFee == 0 ? 'Miễn phí' : formatPrice($shippingFee) ?>
+                                </span>
+                            </div>
+                            <div class="flex justify-between text-gray-600">
+                                <span>VAT (10%)</span>
+                                <span class="font-medium"><?= formatPrice($vat) ?></span>
+                            </div>
+                        </div>
+
+                        <div class="border-t border-gray-100 mt-4 pt-4 mb-5">
+                            <div class="flex justify-between items-baseline">
+                                <span class="text-base font-bold text-gray-900">Tổng cộng</span>
+                                <span class="text-2xl font-black text-bb-blue"><?= formatPrice($total) ?></span>
+                            </div>
+                        </div>
+
+                        <!-- Submit button -->
+                        <button type="submit" id="place-order-btn" 
+                                class="w-full bg-bb-yellow text-bb-dark font-bold py-4 rounded-xl hover:bg-yellow-300 active:scale-[0.98] transition-all shadow-lg shadow-yellow-500/20 text-base flex items-center justify-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                            Đặt hàng
+                        </button>
+
+                        <!-- Trust badges -->
+                        <div class="mt-4 flex flex-wrap items-center justify-center gap-3 text-xs text-gray-400">
+                            <span class="flex items-center gap-1">
+                                <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"></path></svg>
+                                SSL Bảo mật
+                            </span>
+                            <span class="flex items-center gap-1">
+                                <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
+                                Hoàn tiền 100%
+                            </span>
+                        </div>
+
+                        <!-- Edit cart link -->
+                        <a href="/cart.php" class="block mt-3 text-center text-sm text-bb-blue hover:text-bb-dark font-medium transition-colors">
+                            ← Quay lại giỏ hàng
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </form>
+        <?php endif; ?>
+    </div>
+
+    <!-- Checkout JavaScript — Client-side Validation -->
+    <script>
+    /**
+     * Payment option UI toggle
+     */
+    function updatePaymentUI() {
+        const options = document.querySelectorAll('.payment-option');
+        options.forEach(opt => {
+            const radio = opt.querySelector('input[type="radio"]');
+            if (radio.checked) {
+                opt.classList.add('border-bb-blue', 'bg-blue-50/50');
+                opt.classList.remove('border-gray-200');
+            } else {
+                opt.classList.remove('border-bb-blue', 'bg-blue-50/50');
+                opt.classList.add('border-gray-200');
+            }
+        });
+
+        // Toggle card form
+        const cardForm = document.getElementById('card-form');
+        const cardRadio = document.querySelector('input[value="card"]');
+        if (cardForm && cardRadio) {
+            cardForm.classList.toggle('hidden', !cardRadio.checked);
+        }
+    }
+
+    /**
+     * Client-side form validation
+     */
+    document.getElementById('checkout-form')?.addEventListener('submit', function(e) {
+        const name    = document.getElementById('customer_name');
+        const email   = document.getElementById('customer_email');
+        const phone   = document.getElementById('customer_phone');
+        const address = document.getElementById('shipping_address');
+        const payment = document.querySelector('input[name="payment_method"]:checked');
+
+        let hasError = false;
+
+        // Clear previous client errors
+        document.querySelectorAll('.client-error').forEach(el => el.remove());
+
+        function showFieldError(field, message) {
+            field.classList.add('border-red-400', 'bg-red-50');
+            field.classList.remove('border-gray-200');
+            const p = document.createElement('p');
+            p.className = 'client-error text-red-500 text-xs mt-1.5';
+            p.textContent = message;
+            field.parentNode.appendChild(p);
+            hasError = true;
+        }
+
+        function clearFieldError(field) {
+            field.classList.remove('border-red-400', 'bg-red-50');
+            field.classList.add('border-gray-200');
+        }
+
+        // Validate name
+        clearFieldError(name);
+        if (!name.value.trim()) {
+            showFieldError(name, 'Vui lòng nhập họ tên');
+        } else if (name.value.trim().length < 2) {
+            showFieldError(name, 'Họ tên phải có ít nhất 2 ký tự');
+        }
+
+        // Validate email
+        clearFieldError(email);
+        if (!email.value.trim()) {
+            showFieldError(email, 'Vui lòng nhập email');
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) {
+            showFieldError(email, 'Email không hợp lệ');
+        }
+
+        // Validate phone
+        clearFieldError(phone);
+        if (!phone.value.trim()) {
+            showFieldError(phone, 'Vui lòng nhập số điện thoại');
+        } else if (!/^[0-9+\-\s()]{8,20}$/.test(phone.value.trim())) {
+            showFieldError(phone, 'Số điện thoại không hợp lệ');
+        }
+
+        // Validate address
+        clearFieldError(address);
+        if (!address.value.trim()) {
+            showFieldError(address, 'Vui lòng nhập địa chỉ giao hàng');
+        } else if (address.value.trim().length < 10) {
+            showFieldError(address, 'Địa chỉ phải có ít nhất 10 ký tự');
+        }
+
+        // Validate payment
+        if (!payment) {
+            hasError = true;
+            if (typeof showToast === 'function') {
+                showToast('Vui lòng chọn phương thức thanh toán', 'error');
+            }
+        }
+
+        if (hasError) {
+            e.preventDefault();
+            // Scroll to first error
+            const firstError = document.querySelector('.border-red-400');
+            if (firstError) {
+                firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                firstError.focus();
+            }
+            return false;
+        }
+
+        // Show loading state on button
+        const btn = document.getElementById('place-order-btn');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `
+                <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                Đang xử lý đơn hàng...`;
+        }
+    });
+
+    // Real-time field validation (clear error on input)
+    document.querySelectorAll('#checkout-form input, #checkout-form textarea').forEach(field => {
+        field.addEventListener('input', function() {
+            this.classList.remove('border-red-400', 'bg-red-50');
+            this.classList.add('border-gray-200');
+            const error = this.parentNode.querySelector('.client-error');
+            if (error) error.remove();
+        });
+    });
+    </script>
+
+<?php require_once __DIR__ . '/includes/footer.php'; ?>
