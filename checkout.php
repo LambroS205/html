@@ -25,7 +25,7 @@ $pdo = Database::getConnection();
 // ── Kiểm tra giỏ hàng ──
 $cartItems = $_SESSION['cart'] ?? [];
 if (empty($cartItems) && $_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Location: /cart.php');
+    header('Location: /');
     exit;
 }
 
@@ -259,7 +259,7 @@ require_once __DIR__ . '/includes/header.php';
         <nav class="flex items-center gap-2 text-sm text-gray-400 mb-6">
             <a href="/" class="hover:text-bb-blue transition-colors">Trang chủ</a>
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-            <a href="/cart.php" class="hover:text-bb-blue transition-colors">Giỏ hàng</a>
+            <button type="button" onclick="openCartDrawer()" class="hover:text-bb-blue transition-colors cursor-pointer text-sm bg-transparent border-none p-0 outline-none">Giỏ hàng</button>
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
             <span class="text-gray-600 font-medium"><?= $orderSuccess ? 'Đặt hàng thành công' : 'Thanh toán' ?></span>
         </nav>
@@ -618,9 +618,9 @@ require_once __DIR__ . '/includes/header.php';
                         </div>
 
                         <!-- Edit cart link -->
-                        <a href="/cart.php" class="block mt-3 text-center text-sm text-bb-blue hover:text-bb-dark font-medium transition-colors">
+                        <button type="button" onclick="openCartDrawer()" class="block w-full mt-3 text-center text-sm text-bb-blue hover:text-bb-dark font-medium transition-colors bg-transparent border-none p-0 cursor-pointer outline-none">
                             ← Quay lại giỏ hàng
-                        </a>
+                        </button>
                     </div>
                 </div>
             </div>

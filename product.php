@@ -25,7 +25,9 @@ if (empty($slug)) {
 
 // ── Query sản phẩm ──
 $stmt = $pdo->prepare("
-    SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug
+    SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug,
+           (SELECT COALESCE(AVG(rating), 0) FROM reviews WHERE product_id = p.id) as real_rating,
+           (SELECT COUNT(id) FROM reviews WHERE product_id = p.id) as real_review_count
     FROM products p
     JOIN categories c ON p.category_id = c.id
     WHERE p.slug = :slug
@@ -101,13 +103,15 @@ $productImage = $defaultVariant && !empty($defaultVariant['image_url']) ? $defau
 $relatedStmt = $pdo->prepare("
     SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug,
            MIN(pv.price) as price, MIN(pv.sale_price) as sale_price, SUM(pv.stock) as stock,
-           (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image
+           (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image,
+           (SELECT COALESCE(AVG(rating), 0) FROM reviews WHERE product_id = p.id) as real_rating,
+           (SELECT COUNT(id) FROM reviews WHERE product_id = p.id) as real_review_count
     FROM products p
     JOIN categories c ON p.category_id = c.id
     LEFT JOIN product_variants pv ON p.id = pv.product_id
     WHERE p.category_id = :cat_id AND p.id != :product_id
     GROUP BY p.id
-    ORDER BY p.rating DESC
+    ORDER BY real_rating DESC
     LIMIT 4
 ");
 $relatedStmt->execute([':cat_id' => $product['category_id'], ':product_id' => $product['id']]);
@@ -124,23 +128,17 @@ $reviewsStmt = $pdo->prepare("
 $reviewsStmt->execute([':product_id' => $product['id']]);
 $reviews = $reviewsStmt->fetchAll();
 
-// Kiểm tra quyền đánh giá (đã đăng nhập, đã mua và chưa đánh giá)
+// Kiểm tra quyền đánh giá (đã đăng nhập và chưa đánh giá)
 $canReview = false;
+$hasReviewed = false;
 if (!empty($_SESSION['user']['id'])) {
     $userId = $_SESSION['user']['id'];
-    $checkPurchase = $pdo->prepare("
-        SELECT COUNT(oi.id) FROM order_items oi 
-        JOIN orders o ON oi.order_id = o.id 
-        WHERE oi.product_id = :product_id AND o.user_id = :user_id AND o.status = 'delivered'
-    ");
-    $checkPurchase->execute([':product_id' => $product['id'], ':user_id' => $userId]);
-    
-    if ($checkPurchase->fetchColumn() > 0) {
-        $checkReviewed = $pdo->prepare("SELECT id FROM reviews WHERE product_id = :product_id AND user_id = :user_id");
-        $checkReviewed->execute([':product_id' => $product['id'], ':user_id' => $userId]);
-        if (!$checkReviewed->fetch()) {
-            $canReview = true;
-        }
+    $checkReviewed = $pdo->prepare("SELECT id FROM reviews WHERE product_id = :product_id AND user_id = :user_id");
+    $checkReviewed->execute([':product_id' => $product['id'], ':user_id' => $userId]);
+    if ($checkReviewed->fetch()) {
+        $hasReviewed = true;
+    } else {
+        $canReview = true;
     }
 }
 
@@ -234,7 +232,7 @@ $image = getProductImage($product['image'] ?? '');
 
                 <!-- Rating -->
                 <div class="flex items-center gap-3">
-                    <?= renderStars((float) $product['rating'], (int) $product['review_count']) ?>
+                    <?= renderStars(isset($product['real_rating']) ? (float) $product['real_rating'] : (float) $product['rating'], isset($product['real_review_count']) ? (int) $product['real_review_count'] : (int) $product['review_count']) ?>
                     <span class="text-sm text-gray-400">|</span>
                     <span class="text-sm text-gray-400">Mã SP: <span class="text-gray-600 font-medium">BB-<?= str_pad($product['id'], 5, '0', STR_PAD_LEFT) ?></span></span>
                 </div>
@@ -401,6 +399,11 @@ $image = getProductImage($product['image'] ?? '');
                             Gửi đánh giá
                         </button>
                     </form>
+                </div>
+                <?php elseif (empty($_SESSION['user']['id'])): ?>
+                <div class="bg-blue-50/50 rounded-xl p-5 mb-8 border border-blue-100 text-center">
+                    <p class="text-gray-600 mb-3">Vui lòng đăng nhập để gửi đánh giá của bạn về sản phẩm này.</p>
+                    <a href="/auth/login.php" class="inline-block bg-bb-blue text-white font-semibold py-2.5 px-6 rounded-lg hover:bg-bb-dark transition-colors">Đăng nhập ngay</a>
                 </div>
                 <?php endif; ?>
 

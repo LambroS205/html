@@ -41,9 +41,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $price      = (float) ($_POST['price'] ?? 0);
         $salePrice  = !empty($_POST['sale_price']) ? (float) $_POST['sale_price'] : null;
         $stock      = (int) ($_POST['stock'] ?? 0);
-        $rating     = (float) ($_POST['rating'] ?? 0);
-        $reviewCnt  = (int) ($_POST['review_count'] ?? 0);
-        $isFeatured = isset($_POST['is_featured']) ? 1 : 0;
         $image      = trim($_POST['image'] ?? '');
         $specs      = trim($_POST['specs'] ?? '');
 
@@ -57,12 +54,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $pdo->beginTransaction();
                 $stmt = $pdo->prepare("
-                    INSERT INTO products (category_id, name, slug, description, rating, review_count, is_featured)
-                    VALUES (:cat, :name, :slug, :desc, :rating, :reviews, :featured)
+                    INSERT INTO products (category_id, name, slug, description)
+                    VALUES (:cat, :name, :slug, :desc)
                 ");
                 $stmt->execute([
                     ':cat' => $catId, ':name' => $name, ':slug' => $slug, ':desc' => $desc,
-                    ':rating' => $rating, ':reviews' => $reviewCnt, ':featured' => $isFeatured,
                 ]);
                 $newProductId = $pdo->lastInsertId();
 
@@ -108,9 +104,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $price      = (float) ($_POST['price'] ?? 0);
         $salePrice  = !empty($_POST['sale_price']) ? (float) $_POST['sale_price'] : null;
         $stock      = (int) ($_POST['stock'] ?? 0);
-        $rating     = (float) ($_POST['rating'] ?? 0);
-        $reviewCnt  = (int) ($_POST['review_count'] ?? 0);
-        $isFeatured = isset($_POST['is_featured']) ? 1 : 0;
         $image      = trim($_POST['image'] ?? '');
         $specs      = trim($_POST['specs'] ?? '');
 
@@ -119,13 +112,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->beginTransaction();
                 $stmt = $pdo->prepare("
                     UPDATE products SET
-                        category_id = :cat, name = :name, slug = :slug, description = :desc,
-                        rating = :rating, review_count = :reviews, is_featured = :featured
+                        category_id = :cat, name = :name, slug = :slug, description = :desc
                     WHERE id = :id
                 ");
                 $stmt->execute([
-                    ':cat' => $catId, ':name' => $name, ':slug' => $slug, ':desc' => $desc,
-                    ':rating' => $rating, ':reviews' => $reviewCnt, ':featured' => $isFeatured, ':id' => $id,
+                    ':cat' => $catId, ':name' => $name, ':slug' => $slug, ':desc' => $desc, ':id' => $id,
                 ]);
                 
                 // Cập nhật variant mặc định (hoặc tạo mới nếu chưa có)
@@ -283,12 +274,6 @@ if ($action === 'add' || $action === 'edit'):
                            value="<?= htmlspecialchars($product['stock'] ?? '50') ?>"
                            class="w-full px-4 py-3 bg-admin-bg border border-admin-border rounded-xl text-white text-sm focus:border-bb-yellow outline-none">
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-400 mb-1.5">Rating (0-5)</label>
-                    <input type="number" name="rating" step="0.1" min="0" max="5"
-                           value="<?= htmlspecialchars($product['rating'] ?? '0') ?>"
-                           class="w-full px-4 py-3 bg-admin-bg border border-admin-border rounded-xl text-white text-sm focus:border-bb-yellow outline-none">
-                </div>
             </div>
 
             <!-- Row 4: Description -->
@@ -307,23 +292,7 @@ if ($action === 'add' || $action === 'edit'):
                           placeholder='{"screen": "6.9 inch", "chip": "A18 Pro", "ram": "8GB"}'><?= htmlspecialchars($product['specs'] ?? '') ?></textarea>
             </div>
 
-            <!-- Row 6: Options -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-400 mb-1.5">Số lượt đánh giá</label>
-                    <input type="number" name="review_count" min="0"
-                           value="<?= htmlspecialchars($product['review_count'] ?? '0') ?>"
-                           class="w-full px-4 py-3 bg-admin-bg border border-admin-border rounded-xl text-white text-sm focus:border-bb-yellow outline-none">
-                </div>
-                <div class="flex items-end">
-                    <label class="flex items-center gap-3 px-4 py-3 bg-admin-bg border border-admin-border rounded-xl cursor-pointer hover:border-bb-yellow transition-colors w-full">
-                        <input type="checkbox" name="is_featured" value="1"
-                               <?= ($product['is_featured'] ?? 0) ? 'checked' : '' ?>
-                               class="w-5 h-5 text-bb-yellow rounded focus:ring-bb-yellow bg-admin-border border-admin-border">
-                        <span class="text-sm text-gray-300">⭐ Sản phẩm nổi bật (hiện trang chủ)</span>
-                    </label>
-                </div>
-            </div>
+
 
             <!-- Submit -->
             <div class="flex gap-3 pt-2">
@@ -344,7 +313,9 @@ if ($action === 'add' || $action === 'edit'):
                (SELECT MIN(price) FROM product_variants WHERE product_id = p.id) as price,
                (SELECT MIN(sale_price) FROM product_variants WHERE product_id = p.id AND sale_price > 0) as sale_price,
                (SELECT SUM(stock) FROM product_variants WHERE product_id = p.id) as stock,
-               (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image
+               (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image,
+               (SELECT COALESCE(AVG(rating), 0) FROM reviews WHERE product_id = p.id) as real_rating,
+               (SELECT COUNT(id) FROM reviews WHERE product_id = p.id) as real_review_count
         FROM products p
         JOIN categories c ON p.category_id = c.id
         ORDER BY p.id DESC
@@ -391,7 +362,7 @@ if ($action === 'add' || $action === 'edit'):
                                 </div>
                                 <div class="min-w-0">
                                     <p class="text-white font-medium truncate max-w-[200px]"><?= htmlspecialchars($p['name']) ?></p>
-                                    <p class="text-xs text-gray-500">⭐ <?= $p['rating'] ?> (<?= $p['review_count'] ?>)</p>
+                                    <p class="text-xs text-gray-500">⭐ <?= number_format($p['real_rating'], 1) ?> (<?= $p['real_review_count'] ?>)</p>
                                 </div>
                             </div>
                         </td>
@@ -409,7 +380,7 @@ if ($action === 'add' || $action === 'edit'):
                                 <?= $p['stock'] ?>
                             </span>
                         </td>
-                        <td class="px-5 py-3 text-center"><?= $p['is_featured'] ? '⭐' : '—' ?></td>
+                        <td class="px-5 py-3 text-center">—</td>
                         <td class="px-5 py-3 text-right">
                             <div class="flex items-center justify-end gap-1">
                                 <a href="/<?= htmlspecialchars($p['slug']) ?>.html" target="_blank"

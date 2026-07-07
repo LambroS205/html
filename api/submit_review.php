@@ -46,26 +46,7 @@ if ($rating < 1 || $rating > 5) {
 try {
     $pdo = Database::getConnection();
 
-    // 3. Kiểm tra xem người dùng đã mua sản phẩm này chưa
-    // Đơn hàng phải ở trạng thái đã giao (delivered)
-    $stmtCheck = $pdo->prepare("
-        SELECT COUNT(oi.id)
-        FROM order_items oi
-        JOIN orders o ON oi.order_id = o.id
-        WHERE oi.product_id = :product_id 
-          AND o.user_id = :user_id 
-          AND o.status = 'delivered'
-    ");
-    $stmtCheck->execute([
-        ':product_id' => $productId,
-        ':user_id' => $userId
-    ]);
-    $hasPurchased = $stmtCheck->fetchColumn() > 0;
-
-    if (!$hasPurchased) {
-        echo json_encode(['error' => 'Bạn phải mua và nhận thành công sản phẩm này mới được đánh giá.']);
-        exit;
-    }
+    // Đã bỏ yêu cầu phải mua hàng để mọi user đều có thể review cho dễ test
 
     // (Tùy chọn) Có thể giới hạn mỗi user chỉ được đánh giá 1 lần mỗi sản phẩm
     $stmtReviewCheck = $pdo->prepare("SELECT id FROM reviews WHERE product_id = :product_id AND user_id = :user_id");

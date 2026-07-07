@@ -74,8 +74,8 @@ function renderProductCard(array $product): string
     $slug      = htmlspecialchars($product['slug']);
     $price     = (float) $product['price'];
     $salePrice = $product['sale_price'] ? (float) $product['sale_price'] : null;
-    $rating    = (float) $product['rating'];
-    $reviews   = (int) $product['review_count'];
+    $rating    = isset($product['real_rating']) ? (float) $product['real_rating'] : (float) ($product['rating'] ?? 0);
+    $reviews   = isset($product['real_review_count']) ? (int) $product['real_review_count'] : (int) ($product['review_count'] ?? 0);
     $stock     = (int) $product['stock'];
     $catName   = htmlspecialchars($product['category_name'] ?? '');
     $catIcon   = $product['category_icon'] ?? '📦';

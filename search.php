@@ -54,7 +54,7 @@ $whereSQL = !empty($whereClauses) ? 'WHERE ' . implode(' AND ', $whereClauses) :
 $orderMap = [
     'price_asc'  => 'MIN(COALESCE(pv.sale_price, pv.price)) ASC',
     'price_desc' => 'MIN(COALESCE(pv.sale_price, pv.price)) DESC',
-    'rating'     => 'p.rating DESC, p.review_count DESC',
+    'rating'     => 'real_rating DESC, real_review_count DESC',
     'newest'     => 'p.created_at DESC',
     'name'       => 'p.name ASC',
 ];
@@ -63,7 +63,9 @@ $orderSQL = $orderMap[$sortBy] ?? $orderMap['newest'];
 $sql = "
     SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug,
            MIN(pv.price) as price, MIN(pv.sale_price) as sale_price, SUM(pv.stock) as stock,
-           (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image
+           (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image,
+           (SELECT COALESCE(AVG(rating), 0) FROM reviews WHERE product_id = p.id) as real_rating,
+           (SELECT COUNT(id) FROM reviews WHERE product_id = p.id) as real_review_count
     FROM products p
     JOIN categories c ON p.category_id = c.id
     LEFT JOIN product_variants pv ON p.id = pv.product_id

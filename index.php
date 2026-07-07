@@ -13,17 +13,19 @@ require_once __DIR__ . '/includes/header.php';
 // ── Lấy dữ liệu sản phẩm ──
 $pdo = Database::getConnection();
 
-// Featured products (có is_featured = 1) — hiển thị ở phần "Sản phẩm nổi bật"
+// Featured products — hiển thị ở phần "Sản phẩm nổi bật" (Tính real-time dựa trên doanh số và rating thực)
 $featuredProducts = $pdo->query("
     SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug,
            MIN(pv.price) as price, MIN(pv.sale_price) as sale_price, SUM(pv.stock) as stock,
-           (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image
+           (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image,
+           (SELECT COALESCE(AVG(rating), 0) FROM reviews WHERE product_id = p.id) as real_rating,
+           (SELECT COUNT(id) FROM reviews WHERE product_id = p.id) as real_review_count,
+           (SELECT COALESCE(SUM(quantity), 0) FROM order_items WHERE product_id = p.id) as total_sold
     FROM products p
     JOIN categories c ON p.category_id = c.id
     LEFT JOIN product_variants pv ON p.id = pv.product_id
-    WHERE p.is_featured = 1
     GROUP BY p.id
-    ORDER BY p.rating DESC
+    ORDER BY total_sold DESC, real_rating DESC
     LIMIT 8
 ")->fetchAll();
 
@@ -31,7 +33,9 @@ $featuredProducts = $pdo->query("
 $dealProducts = $pdo->query("
     SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug,
            MIN(pv.price) as price, MIN(pv.sale_price) as sale_price, SUM(pv.stock) as stock,
-           (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image
+           (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image,
+           (SELECT COALESCE(AVG(rating), 0) FROM reviews WHERE product_id = p.id) as real_rating,
+           (SELECT COUNT(id) FROM reviews WHERE product_id = p.id) as real_review_count
     FROM products p
     JOIN categories c ON p.category_id = c.id
     JOIN product_variants pv ON p.id = pv.product_id
@@ -45,7 +49,9 @@ $dealProducts = $pdo->query("
 $allProducts = $pdo->query("
     SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug,
            MIN(pv.price) as price, MIN(pv.sale_price) as sale_price, SUM(pv.stock) as stock,
-           (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image
+           (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image,
+           (SELECT COALESCE(AVG(rating), 0) FROM reviews WHERE product_id = p.id) as real_rating,
+           (SELECT COUNT(id) FROM reviews WHERE product_id = p.id) as real_review_count
     FROM products p
     JOIN categories c ON p.category_id = c.id
     LEFT JOIN product_variants pv ON p.id = pv.product_id
@@ -125,17 +131,59 @@ $categoriesWithCount = $pdo->query("
                     <div class="absolute w-72 h-72 rounded-full border border-blue-400/10 animate-spin-reverse"></div>
                     <div class="absolute w-64 h-64 rounded-full bg-gradient-to-br from-bb-yellow/5 to-blue-500/5"></div>
                     
-                    <!-- Featured product showcase -->
-                    <div class="relative z-10 bg-white/10 backdrop-blur-md rounded-3xl p-8 border border-white/10 shadow-2xl transform rotate-2 hover:rotate-0 transition-transform duration-500">
-                        <div class="text-center">
-                            <span class="text-6xl mb-4 block">💻</span>
-                            <p class="text-bb-yellow font-bold text-sm mb-1">Sản phẩm nổi bật</p>
-                            <p class="text-white font-semibold text-lg">MacBook Pro M4</p>
-                            <p class="text-blue-200/60 text-sm mt-1 mb-3">Hiệu năng vượt trội</p>
-                            <span class="inline-block bg-bb-yellow text-bb-dark text-sm font-bold px-4 py-1.5 rounded-full">
-                                Từ 2.299 VNĐ
-                            </span>
-                        </div>
+                    <!-- Featured product showcase (Dynamic Slideshow) -->
+                    <div class="relative z-10 bg-white/10 backdrop-blur-md rounded-3xl p-8 border border-white/10 shadow-2xl transform rotate-2 hover:rotate-0 transition-transform duration-500 overflow-hidden w-full max-w-sm h-[320px] flex items-center justify-center">
+                        <?php if(!empty($featuredProducts)): ?>
+                            <div class="relative w-full h-full flex items-center justify-center" id="featured-slideshow">
+                                <?php foreach($featuredProducts as $index => $fp): 
+                                    $fpImage = !empty($fp['image']) ? '/' . ltrim($fp['image'], '/') : null;
+                                    $fpDisplayPrice = $fp['sale_price'] ?? $fp['price'];
+                                ?>
+                                    <div class="absolute inset-0 transition-opacity duration-1000 ease-in-out flex flex-col items-center justify-center text-center slide <?= $index === 0 ? 'opacity-100 z-10' : 'opacity-0 z-0' ?>">
+                                        <a href="/product.php?slug=<?= htmlspecialchars($fp['slug']) ?>" class="block group">
+                                            <?php if($fpImage): ?>
+                                                <img src="<?= htmlspecialchars($fpImage) ?>" alt="<?= htmlspecialchars($fp['name']) ?>" class="h-32 w-auto object-contain mb-4 mx-auto drop-shadow-2xl group-hover:scale-110 transition-transform duration-300">
+                                            <?php else: ?>
+                                                <span class="text-6xl mb-4 block drop-shadow-2xl group-hover:scale-110 transition-transform duration-300"><?= htmlspecialchars($fp['category_icon'] ?? '💻') ?></span>
+                                            <?php endif; ?>
+                                            <p class="text-bb-yellow font-bold text-xs uppercase tracking-wider mb-2">Sản phẩm nổi bật</p>
+                                            <h3 class="text-white font-bold text-lg leading-tight mb-2 px-2 line-clamp-2"><?= htmlspecialchars($fp['name']) ?></h3>
+                                        </a>
+                                        <div class="flex items-center gap-2 mb-4">
+                                            <span class="text-yellow-400 text-sm">★ <?= number_format((float)$fp['real_rating'], 1) ?></span>
+                                            <span class="text-blue-200/50 text-xs">(<?= (int)$fp['real_review_count'] ?>)</span>
+                                        </div>
+                                        <a href="/product.php?slug=<?= htmlspecialchars($fp['slug']) ?>" class="inline-block bg-bb-yellow text-bb-dark text-sm font-bold px-5 py-2 rounded-full hover:bg-yellow-300 transition-colors shadow-lg">
+                                            Từ <?= formatPrice($fpDisplayPrice) ?>
+                                        </a>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <script>
+                                document.addEventListener('DOMContentLoaded', function() {
+                                    const slides = document.querySelectorAll('#featured-slideshow .slide');
+                                    if(slides.length <= 1) return;
+                                    let currentSlide = 0;
+                                    setInterval(() => {
+                                        slides[currentSlide].classList.remove('opacity-100', 'z-10');
+                                        slides[currentSlide].classList.add('opacity-0', 'z-0');
+                                        currentSlide = (currentSlide + 1) % slides.length;
+                                        slides[currentSlide].classList.remove('opacity-0', 'z-0');
+                                        slides[currentSlide].classList.add('opacity-100', 'z-10');
+                                    }, 3500); // Đổi slide mỗi 3.5 giây
+                                });
+                            </script>
+                        <?php else: ?>
+                            <div class="text-center">
+                                <span class="text-6xl mb-4 block">💻</span>
+                                <p class="text-bb-yellow font-bold text-sm mb-1">Sản phẩm nổi bật</p>
+                                <p class="text-white font-semibold text-lg">MacBook Pro M4</p>
+                                <p class="text-blue-200/60 text-sm mt-1 mb-3">Hiệu năng vượt trội</p>
+                                <span class="inline-block bg-bb-yellow text-bb-dark text-sm font-bold px-4 py-1.5 rounded-full">
+                                    Từ 2.299 VNĐ
+                                </span>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
