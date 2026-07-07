@@ -31,10 +31,29 @@ if (empty($cartItems) && $_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 // ── Biến lưu trạng thái ──
 $errors       = [];
-$formData     = [];
+$formData     = [
+    'customer_name'  => '',
+    'customer_email' => '',
+    'customer_phone' => '',
+    'shipping_address' => '',
+    'payment_method' => ''
+];
 $orderSuccess = false;
 $orderCode    = '';
 $orderTotal   = 0;
+
+// GET request: auto-fill từ session user nếu đã đăng nhập
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' && !empty($_SESSION['user'])) {
+    $userInfo = $pdo->prepare("SELECT name, email, phone, address FROM users WHERE id = :id LIMIT 1");
+    $userInfo->execute([':id' => (int)$_SESSION['user']['id']]);
+    $userData = $userInfo->fetch();
+    if ($userData) {
+        $formData['customer_name'] = $userData['name'] ?? '';
+        $formData['customer_email'] = $userData['email'] ?? '';
+        $formData['customer_phone'] = $userData['phone'] ?? '';
+        $formData['shipping_address'] = $userData['address'] ?? '';
+    }
+}
 
 // ═══════════════════════════════════════
 // XỬ LÝ POST — Đặt hàng
@@ -50,22 +69,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'shipping_address' => trim($_POST['shipping_address'] ?? ''),
         'payment_method' => trim($_POST['payment_method'] ?? ''),
     ];
-} else {
-    // GET request: auto-fill từ session user nếu đã đăng nhập
-    if (!empty($_SESSION['user'])) {
-        $userInfo = $pdo->prepare("SELECT name, email, phone, address FROM users WHERE id = :id LIMIT 1");
-        $userInfo->execute([':id' => (int)$_SESSION['user']['id']]);
-        $userData = $userInfo->fetch();
-        if ($userData) {
-            $formData = [
-                'customer_name'  => $userData['name'] ?? '',
-                'customer_email' => $userData['email'] ?? '',
-                'customer_phone' => $userData['phone'] ?? '',
-                'shipping_address' => $userData['address'] ?? '',
-                'payment_method' => '',
-            ];
-        }
-    }
 
     // ══════════════════════════════════
     // SERVER-SIDE VALIDATION

@@ -78,7 +78,7 @@ if ($action === 'view'):
     }
 
     // Items
-    $itemStmt = $pdo->prepare("SELECT oi.*, p.image, p.slug FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = :oid ORDER BY oi.id");
+    $itemStmt = $pdo->prepare("SELECT oi.*, pv.image_url AS image, p.slug FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id LEFT JOIN product_variants pv ON oi.variant_id = pv.id WHERE oi.order_id = :oid ORDER BY oi.id");
     $itemStmt->execute([':oid' => $orderId]);
     $items = $itemStmt->fetchAll();
 

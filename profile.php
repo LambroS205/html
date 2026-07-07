@@ -55,9 +55,10 @@ if (!empty($orders)) {
     $orderIds = array_column($orders, 'id');
     $placeholders = implode(',', array_fill(0, count($orderIds), '?'));
     $itemsStmt = $pdo->prepare("
-        SELECT oi.*, p.slug, p.image 
+        SELECT oi.*, p.slug, pv.image_url AS image 
         FROM order_items oi
         LEFT JOIN products p ON p.id = oi.product_id
+        LEFT JOIN product_variants pv ON pv.id = oi.variant_id
         WHERE oi.order_id IN ({$placeholders})
         ORDER BY oi.id ASC
     ");

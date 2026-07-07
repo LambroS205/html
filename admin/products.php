@@ -55,20 +55,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (empty($errors)) {
             try {
+                $pdo->beginTransaction();
                 $stmt = $pdo->prepare("
-                    INSERT INTO products (category_id, name, slug, description, specs, price, sale_price, image, stock, rating, review_count, is_featured)
-                    VALUES (:cat, :name, :slug, :desc, :specs, :price, :sale, :img, :stock, :rating, :reviews, :featured)
+                    INSERT INTO products (category_id, name, slug, description, rating, review_count, is_featured)
+                    VALUES (:cat, :name, :slug, :desc, :rating, :reviews, :featured)
                 ");
                 $stmt->execute([
                     ':cat' => $catId, ':name' => $name, ':slug' => $slug, ':desc' => $desc,
-                    ':specs' => $specs, ':price' => $price, ':sale' => $salePrice,
-                    ':img' => $image, ':stock' => $stock, ':rating' => $rating,
-                    ':reviews' => $reviewCnt, ':featured' => $isFeatured,
+                    ':rating' => $rating, ':reviews' => $reviewCnt, ':featured' => $isFeatured,
                 ]);
+                $newProductId = $pdo->lastInsertId();
+
+                $variantStmt = $pdo->prepare("
+                    INSERT INTO product_variants (product_id, sku, price, sale_price, stock, image_url)
+                    VALUES (:pid, :sku, :price, :sale, :stock, :img)
+                ");
+                $variantStmt->execute([
+                    ':pid' => $newProductId,
+                    ':sku' => 'SKU-DEFAULT-' . $newProductId,
+                    ':price' => $price,
+                    ':sale' => $salePrice,
+                    ':stock' => $stock,
+                    ':img' => $image
+                ]);
+                $pdo->commit();
+                
                 $message = '✅ Đã thêm sản phẩm "' . htmlspecialchars($name) . '" thành công!';
                 $msgType = 'success';
                 $action = 'list'; // Quay lại danh sách
             } catch (PDOException $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
                 if (str_contains($e->getMessage(), 'Duplicate')) {
                     $message = '❌ Slug "' . htmlspecialchars($slug) . '" đã tồn tại. Vui lòng đổi tên.';
                 } else {
@@ -100,23 +116,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($id > 0 && !empty($name) && $price > 0) {
             try {
+                $pdo->beginTransaction();
                 $stmt = $pdo->prepare("
                     UPDATE products SET
                         category_id = :cat, name = :name, slug = :slug, description = :desc,
-                        specs = :specs, price = :price, sale_price = :sale, image = :img,
-                        stock = :stock, rating = :rating, review_count = :reviews, is_featured = :featured
+                        rating = :rating, review_count = :reviews, is_featured = :featured
                     WHERE id = :id
                 ");
                 $stmt->execute([
                     ':cat' => $catId, ':name' => $name, ':slug' => $slug, ':desc' => $desc,
-                    ':specs' => $specs, ':price' => $price, ':sale' => $salePrice,
-                    ':img' => $image, ':stock' => $stock, ':rating' => $rating,
-                    ':reviews' => $reviewCnt, ':featured' => $isFeatured, ':id' => $id,
+                    ':rating' => $rating, ':reviews' => $reviewCnt, ':featured' => $isFeatured, ':id' => $id,
                 ]);
+                
+                // Cập nhật variant mặc định (hoặc tạo mới nếu chưa có)
+                $checkVar = $pdo->prepare("SELECT id FROM product_variants WHERE product_id = :pid AND sku LIKE 'SKU-DEFAULT-%' LIMIT 1");
+                $checkVar->execute([':pid' => $id]);
+                if ($checkVar->fetch()) {
+                    $variantStmt = $pdo->prepare("
+                        UPDATE product_variants SET 
+                            price = :price, sale_price = :sale, image_url = :img, stock = :stock
+                        WHERE product_id = :pid AND sku LIKE 'SKU-DEFAULT-%'
+                    ");
+                    $variantStmt->execute([':price' => $price, ':sale' => $salePrice, ':img' => $image, ':stock' => $stock, ':pid' => $id]);
+                }
+                $pdo->commit();
+                
                 $message = '✅ Đã cập nhật sản phẩm "' . htmlspecialchars($name) . '"!';
                 $msgType = 'success';
                 $action = 'list';
             } catch (PDOException $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
                 $message = '❌ Lỗi cập nhật: ' . htmlspecialchars($e->getMessage());
                 $msgType = 'error';
             }
@@ -162,7 +191,13 @@ if ($action === 'add' || $action === 'edit'):
     $product = null;
     if ($action === 'edit') {
         $id = (int) ($_GET['id'] ?? 0);
-        $stmt = $pdo->prepare("SELECT * FROM products WHERE id = :id LIMIT 1");
+        $stmt = $pdo->prepare("SELECT p.*, 
+            (SELECT MIN(price) FROM product_variants WHERE product_id = p.id) as price,
+            (SELECT MIN(sale_price) FROM product_variants WHERE product_id = p.id AND sale_price > 0) as sale_price,
+            (SELECT SUM(stock) FROM product_variants WHERE product_id = p.id) as stock,
+            (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image,
+            '' as specs 
+            FROM products p WHERE id = :id LIMIT 1");
         $stmt->execute([':id' => $id]);
         $product = $stmt->fetch();
         if (!$product) {
@@ -305,7 +340,11 @@ if ($action === 'add' || $action === 'edit'):
 <?php else:
 // ── LIST — Danh sách sản phẩm ──
     $products = $pdo->query("
-        SELECT p.*, c.name AS category_name, c.icon AS category_icon
+        SELECT p.*, c.name AS category_name, c.icon AS category_icon,
+               (SELECT MIN(price) FROM product_variants WHERE product_id = p.id) as price,
+               (SELECT MIN(sale_price) FROM product_variants WHERE product_id = p.id AND sale_price > 0) as sale_price,
+               (SELECT SUM(stock) FROM product_variants WHERE product_id = p.id) as stock,
+               (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image
         FROM products p
         JOIN categories c ON p.category_id = c.id
         ORDER BY p.id DESC
@@ -382,8 +421,8 @@ if ($action === 'add' || $action === 'edit'):
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                                 </a>
                                 <form method="POST" action="/admin/products.php" class="inline"
-                                      onsubmit="return confirmDelete('Xóa sản phẩm \'<?= htmlspecialchars(addslashes($p['name'])) ?>
-        <?= csrfField() ?>\'?')">
+                                      onsubmit="return confirmDelete('Xóa sản phẩm \'<?= htmlspecialchars(addslashes($p['name'])) ?>\'?')">
+                                    <?= csrfField() ?>
                                     <input type="hidden" name="action" value="delete">
                                     <input type="hidden" name="id" value="<?= $p['id'] ?>">
                                     <button type="submit" class="p-2 rounded-lg hover:bg-admin-bg text-gray-400 hover:text-red-400 transition-colors" title="Xóa">
