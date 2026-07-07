@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . "/config/app.php";
-require_once __DIR__ . "/config/db.php";
+require_once __DIR__ . "/../config/app.php";
+require_once __DIR__ . "/../config/db.php";
 $pdo = Database::getConnection();
 
 // Get all used images from DB
@@ -12,7 +12,7 @@ $variants = $pdo->query("SELECT image_url FROM product_variants WHERE image_url 
 foreach ($variants as $img) $usedImages[basename($img)] = 1;
 
 // Scan assets/images
-$dir = __DIR__ . '/assets/images';
+$dir = __DIR__ . '/../assets/images';
 if (is_dir($dir)) {
     $files = scandir($dir);
     $count = 0;
