@@ -105,8 +105,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Phương thức thanh toán
-    if (!in_array($formData['payment_method'], ['cod', 'card'])) {
-        $errors['payment_method'] = 'Vui lòng chọn phương thức thanh toán';
+    if (!in_array($formData['payment_method'], ['cod', 'card', 'vnpay'])) {
+        $errors['payment_method'] = 'Vui lòng chọn phương thức thanh toán hợp lệ';
     }
 
     // Kiểm tra giỏ hàng còn items không
@@ -204,6 +204,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // 4. Clear cart & coupon session
             $_SESSION['cart'] = [];
             unset($_SESSION['coupon']);
+
+            // 5. Nếu là VNPay -> Chuyển hướng sang VNPay
+            if ($formData['payment_method'] === 'vnpay') {
+                require_once __DIR__ . '/config/vnpay.php';
+                
+                $vnp_TxnRef = $orderCode;
+                $vnp_OrderInfo = "Thanh toan don hang " . $orderCode;
+                $vnp_OrderType = 'billpayment';
+                $vnp_Amount = $total * 100;
+                $vnp_Locale = 'vn';
+                $vnp_IpAddr = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+                
+                $inputData = array(
+                    "vnp_Version" => "2.1.0",
+                    "vnp_TmnCode" => VNP_TMN_CODE,
+                    "vnp_Amount" => $vnp_Amount,
+                    "vnp_Command" => "pay",
+                    "vnp_CreateDate" => date('YmdHis'),
+                    "vnp_CurrCode" => "VND",
+                    "vnp_IpAddr" => $vnp_IpAddr,
+                    "vnp_Locale" => $vnp_Locale,
+                    "vnp_OrderInfo" => $vnp_OrderInfo,
+                    "vnp_OrderType" => $vnp_OrderType,
+                    "vnp_ReturnUrl" => VNP_RETURN_URL,
+                    "vnp_TxnRef" => $vnp_TxnRef
+                );
+                
+                ksort($inputData);
+                $query = "";
+                $i = 0;
+                $hashdata = "";
+                foreach ($inputData as $key => $value) {
+                    if ($i == 1) {
+                        $hashdata .= '&' . urlencode($key) . "=" . urlencode($value);
+                    } else {
+                        $hashdata .= urlencode($key) . "=" . urlencode($value);
+                        $i = 1;
+                    }
+                    $query .= urlencode($key) . "=" . urlencode($value) . '&';
+                }
+                
+                $vnp_Url = VNP_URL . "?" . $query;
+                if (defined('VNP_HASH_SECRET') && VNP_HASH_SECRET != '') {
+                    $vnpSecureHash = hash_hmac('sha512', $hashdata, VNP_HASH_SECRET);
+                    $vnp_Url .= 'vnp_SecureHash=' . $vnpSecureHash;
+                }
+                
+                header('Location: ' . $vnp_Url);
+                exit;
+            }
 
             $orderSuccess = true;
             $orderTotal   = $total;
@@ -311,7 +361,7 @@ require_once __DIR__ . '/includes/header.php';
                         <div class="flex justify-between text-sm">
                             <span class="text-gray-400">Thanh toán</span>
                             <span class="font-medium text-gray-700">
-                                <?= $formData['payment_method'] === 'cod' ? '💵 Thanh toán khi nhận hàng (COD)' : '💳 Thẻ quốc tế' ?>
+                                <?php if ($formData['payment_method'] === 'cod') { echo '💵 Thanh toán khi nhận hàng (COD)'; } elseif ($formData['payment_method'] === 'vnpay') { echo '🏦 Thanh toán qua VNPAY'; } else { echo '💳 Thẻ quốc tế'; } ?>
                             </span>
                         </div>
                         <div class="flex justify-between text-sm">
@@ -492,7 +542,7 @@ require_once __DIR__ . '/includes/header.php';
 
                         <div class="space-y-3">
                             <!-- COD -->
-                            <label class="payment-option flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all hover:border-bb-blue/30 <?= ($formData['payment_method'] ?? '') === 'cod' ? 'border-bb-blue bg-blue-50/50' : 'border-gray-200' ?>">
+                            <label class="payment-option flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all hover:border-bb-blue/30 <?= ($formData['payment_method'] ?? 'cod') === 'cod' ? 'border-bb-blue bg-blue-50/50' : 'border-gray-200' ?>">
                                 <input type="radio" name="payment_method" value="cod" 
                                        <?= ($formData['payment_method'] ?? 'cod') === 'cod' ? 'checked' : '' ?>
                                        class="w-5 h-5 text-bb-blue focus:ring-bb-blue"
@@ -514,6 +564,19 @@ require_once __DIR__ . '/includes/header.php';
                                     <span class="text-2xl">💳</span>
                                     <p class="font-semibold text-gray-800 text-sm">Thẻ quốc tế (Visa / Mastercard)</p>
                                     <p class="text-xs text-gray-400 mt-0.5">Thanh toán an toàn qua cổng bảo mật</p>
+                                </div>
+                            </label>
+
+                            <!-- VNPay -->
+                            <label class="payment-option flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all hover:border-bb-blue/30 <?= ($formData['payment_method'] ?? '') === 'vnpay' ? 'border-bb-blue bg-blue-50/50' : 'border-gray-200' ?>">
+                                <input type="radio" name="payment_method" value="vnpay"
+                                       <?= ($formData['payment_method'] ?? '') === 'vnpay' ? 'checked' : '' ?>
+                                       class="w-5 h-5 text-bb-blue focus:ring-bb-blue"
+                                       onchange="updatePaymentUI()">
+                                <div class="flex-1">
+                                    <span class="text-2xl">🏦</span>
+                                    <p class="font-semibold text-gray-800 text-sm">Thanh toán qua VNPAY</p>
+                                    <p class="text-xs text-gray-400 mt-0.5">Quét mã QR qua ứng dụng ngân hàng hoặc thẻ ATM</p>
                                 </div>
                             </label>
                         </div>
