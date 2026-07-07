@@ -142,6 +142,16 @@ if (!empty($_SESSION['user']['id'])) {
     }
 }
 
+// ── Kiểm tra Wishlist ──
+$isWished = false;
+if (!empty($_SESSION['user']['id'])) {
+    $wishCheck = $pdo->prepare("SELECT id FROM wishlists WHERE user_id = :u AND product_id = :p");
+    $wishCheck->execute([':u' => $_SESSION['user']['id'], ':p' => $product['id']]);
+    if ($wishCheck->fetch()) {
+        $isWished = true;
+    }
+}
+
 // ── Page meta ──
 $pageTitle = htmlspecialchars($product['name']) . ' — BestBuy Store';
 $pageDescription = mb_substr(strip_tags($product['description'] ?? ''), 0, 160);
@@ -287,9 +297,14 @@ $image = getProductImage($product['image'] ?? '');
 
                     <!-- Add to Cart Button -->
                     <button id="add-to-cart-btn" onclick="addToCartVariant()" 
-                            class="flex-1 bg-bb-yellow text-bb-dark font-bold py-3.5 px-8 rounded-xl hover:bg-yellow-300 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-yellow-500/20 text-base">
+                            class="flex-1 bg-bb-yellow text-bb-dark font-bold py-3.5 px-6 rounded-xl hover:bg-yellow-300 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-yellow-500/20 text-base">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"></path></svg>
-                        Thêm vào giỏ hàng
+                        Thêm vào giỏ
+                    </button>
+
+                    <!-- Wishlist Button -->
+                    <button type="button" onclick="toggleWishlist(<?= $product['id'] ?>)" id="wishlist-btn" class="w-14 shrink-0 flex items-center justify-center rounded-xl border-2 transition-all duration-200 active:scale-[0.98] <?= $isWished ? 'border-red-500 bg-red-50 text-red-500' : 'border-gray-200 bg-white text-gray-400 hover:border-red-200 hover:text-red-500 hover:bg-red-50' ?>" aria-label="Yêu thích">
+                        <svg class="w-6 h-6" fill="<?= $isWished ? 'currentColor' : 'none' ?>" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
                     </button>
                 </div>
 
@@ -673,6 +688,69 @@ $image = getProductImage($product['image'] ?? '');
             alert('Lỗi: ' + err.message);
             btn.innerHTML = originalBtnHtml;
             btn.disabled = false;
+        }
+    }
+    /**
+     * Wishlist toggle
+     */
+    async function toggleWishlist(productId) {
+        const btn = document.getElementById('wishlist-btn');
+        const icon = btn.querySelector('svg');
+        
+        // Optimistic UI update
+        const isWished = btn.classList.contains('border-red-500');
+        if (isWished) {
+            btn.className = 'w-14 shrink-0 flex items-center justify-center rounded-xl border-2 transition-all duration-200 active:scale-[0.98] border-gray-200 bg-white text-gray-400 hover:border-red-200 hover:text-red-500 hover:bg-red-50';
+            icon.setAttribute('fill', 'none');
+        } else {
+            btn.className = 'w-14 shrink-0 flex items-center justify-center rounded-xl border-2 transition-all duration-200 active:scale-[0.98] border-red-500 bg-red-50 text-red-500';
+            icon.setAttribute('fill', 'currentColor');
+        }
+
+        try {
+            const res = await fetch('/api/wishlist-ajax.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'toggle', product_id: productId })
+            });
+            const data = await res.json();
+            
+            if (data.require_login) {
+                // Revert optimistic UI
+                if (isWished) {
+                    btn.className = 'w-14 shrink-0 flex items-center justify-center rounded-xl border-2 transition-all duration-200 active:scale-[0.98] border-red-500 bg-red-50 text-red-500';
+                    icon.setAttribute('fill', 'currentColor');
+                } else {
+                    btn.className = 'w-14 shrink-0 flex items-center justify-center rounded-xl border-2 transition-all duration-200 active:scale-[0.98] border-gray-200 bg-white text-gray-400 hover:border-red-200 hover:text-red-500 hover:bg-red-50';
+                    icon.setAttribute('fill', 'none');
+                }
+                
+                if (confirm('Vui lòng đăng nhập để sử dụng tính năng Yêu thích. Bạn có muốn chuyển đến trang Đăng nhập?')) {
+                    window.location.href = '/auth/login.php';
+                }
+                return;
+            }
+
+            if (data.success) {
+                // Update badge in header if exists
+                const badge = document.getElementById('wishlist-badge');
+                if (badge) {
+                    badge.textContent = data.count;
+                    if (data.count > 0) {
+                        badge.classList.remove('hidden');
+                    } else {
+                        badge.classList.add('hidden');
+                    }
+                }
+                showToast(data.message, 'success');
+            } else {
+                throw new Error(data.message);
+            }
+        } catch (error) {
+            console.error(error);
+            showToast('Lỗi xử lý yêu cầu', 'error');
+            // Revert UI on error (refresh is safer here)
+            setTimeout(() => window.location.reload(), 1500);
         }
     }
     </script>

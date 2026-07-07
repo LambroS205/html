@@ -24,6 +24,15 @@ if (!empty($_SESSION['cart'])) {
     }
 }
 
+// ── Wishlist count từ db ──
+$wishlistCount = 0;
+$pdo = Database::getConnection();
+if (!empty($_SESSION['user'])) {
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM wishlists WHERE user_id = :u");
+    $stmt->execute([':u' => $_SESSION['user']['id']]);
+    $wishlistCount = (int)$stmt->fetchColumn();
+}
+
 // ── Lấy danh mục cho navigation ──
 $pdo = Database::getConnection();
 $navCategories = $pdo->query("SELECT id, name, slug, icon FROM categories ORDER BY id")->fetchAll();
@@ -84,7 +93,7 @@ $navCategories = $pdo->query("SELECT id, name, slug, icon FROM categories ORDER 
             <div class="flex items-center gap-4">
                 <a href="#" class="hover:text-white transition-colors">Theo dõi đơn hàng</a>
                 <span class="text-gray-600">|</span>
-                <a href="#" class="hover:text-white transition-colors">Blog công nghệ</a>
+                <a href="/blog.php" class="hover:text-white transition-colors">Blog công nghệ</a>
                 <span class="text-gray-600">|</span>
                 <a href="#" class="hover:text-white transition-colors flex items-center gap-1">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
@@ -173,6 +182,14 @@ $navCategories = $pdo->query("SELECT id, name, slug, icon FROM categories ORDER 
                             <span class="hidden lg:inline">Đăng nhập</span>
                         </a>
                     <?php endif; ?>
+
+                    <!-- Wishlist -->
+                    <a href="/wishlist.php" class="relative flex items-center gap-2 text-white hover:text-red-400 transition-colors text-sm group mr-2">
+                        <div class="relative">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
+                            <span id="wishlist-badge" class="absolute -top-2 -right-2.5 bg-red-500 text-white text-[10px] font-black min-w-[20px] h-5 rounded-full flex items-center justify-center shadow <?= ($wishlistCount ?? 0) > 0 ? '' : 'hidden' ?>"><?= $wishlistCount ?? 0 ?></span>
+                        </div>
+                    </a>
 
                     <!-- Cart -->
                     <button type="button" id="cart-link" onclick="openCartDrawer()" class="relative flex items-center gap-2 text-white hover:text-bb-yellow transition-colors text-sm group">

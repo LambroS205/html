@@ -27,6 +27,9 @@ $msgType = 'info';
 // ── Lấy danh mục cho dropdown ──
 $categories = $pdo->query("SELECT id, name, icon FROM categories ORDER BY id")->fetchAll();
 
+// ── Lấy nhà cung cấp cho dropdown ──
+$suppliers = $pdo->query("SELECT id, name FROM suppliers ORDER BY name")->fetchAll();
+
 // ═══════════════════════════════════════
 // XỬ LÝ POST ACTIONS
 // ═══════════════════════════════════════
@@ -36,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'create') {
         $name       = trim($_POST['name'] ?? '');
         $catId      = (int) ($_POST['category_id'] ?? 0);
+        $supplierId = (int) ($_POST['supplier_id'] ?? 0) ?: null;
         $slug       = trim($_POST['slug'] ?? '') ?: createSlug($name);
         $desc       = trim($_POST['description'] ?? '');
         $price      = (float) ($_POST['price'] ?? 0);
@@ -54,11 +58,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $pdo->beginTransaction();
                 $stmt = $pdo->prepare("
-                    INSERT INTO products (category_id, name, slug, description)
-                    VALUES (:cat, :name, :slug, :desc)
+                    INSERT INTO products (category_id, supplier_id, name, slug, description)
+                    VALUES (:cat, :sup, :name, :slug, :desc)
                 ");
                 $stmt->execute([
-                    ':cat' => $catId, ':name' => $name, ':slug' => $slug, ':desc' => $desc,
+                    ':cat' => $catId, ':sup' => $supplierId, ':name' => $name, ':slug' => $slug, ':desc' => $desc,
                 ]);
                 $newProductId = $pdo->lastInsertId();
 
@@ -99,6 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id         = (int) ($_POST['id'] ?? 0);
         $name       = trim($_POST['name'] ?? '');
         $catId      = (int) ($_POST['category_id'] ?? 0);
+        $supplierId = (int) ($_POST['supplier_id'] ?? 0) ?: null;
         $slug       = trim($_POST['slug'] ?? '');
         $desc       = trim($_POST['description'] ?? '');
         $price      = (float) ($_POST['price'] ?? 0);
@@ -112,11 +117,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->beginTransaction();
                 $stmt = $pdo->prepare("
                     UPDATE products SET
-                        category_id = :cat, name = :name, slug = :slug, description = :desc
+                        category_id = :cat, supplier_id = :sup, name = :name, slug = :slug, description = :desc
                     WHERE id = :id
                 ");
                 $stmt->execute([
-                    ':cat' => $catId, ':name' => $name, ':slug' => $slug, ':desc' => $desc, ':id' => $id,
+                    ':cat' => $catId, ':sup' => $supplierId, ':name' => $name, ':slug' => $slug, ':desc' => $desc, ':id' => $id,
                 ]);
                 
                 // Cập nhật variant mặc định (hoặc tạo mới nếu chưa có)
@@ -275,8 +280,8 @@ if ($action === 'add' || $action === 'edit'):
                 <input type="hidden" name="id" value="<?= $product['id'] ?>">
             <?php endif; ?>
 
-            <!-- Row 1: Name + Category -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Row 1: Name + Category + Supplier -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div class="md:col-span-2">
                     <label class="block text-sm font-medium text-gray-400 mb-1.5">Tên sản phẩm <span class="text-red-400">*</span></label>
                     <input type="text" name="name" required
@@ -291,6 +296,17 @@ if ($action === 'add' || $action === 'edit'):
                         <?php foreach ($categories as $cat): ?>
                             <option value="<?= $cat['id'] ?>" <?= ($product['category_id'] ?? '') == $cat['id'] ? 'selected' : '' ?>>
                                 <?= $cat['icon'] ?> <?= htmlspecialchars($cat['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1.5">Nhà cung cấp</label>
+                    <select name="supplier_id" class="w-full px-4 py-3 bg-admin-bg border border-admin-border rounded-xl text-white text-sm focus:border-bb-yellow outline-none">
+                        <option value="">Không có</option>
+                        <?php foreach ($suppliers as $sup): ?>
+                            <option value="<?= $sup['id'] ?>" <?= ($product['supplier_id'] ?? '') == $sup['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($sup['name']) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>

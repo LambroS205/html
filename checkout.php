@@ -567,6 +567,28 @@ require_once __DIR__ . '/includes/header.php';
 
                         <hr class="border-gray-100 mb-4">
 
+                        <!-- Coupon Form -->
+                        <div class="mb-5">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Mã giảm giá</label>
+                            <?php if (isset($_SESSION['coupon'])): ?>
+                                <div class="flex items-center justify-between bg-green-50 border border-green-200 p-3 rounded-xl">
+                                    <div class="flex items-center gap-2">
+                                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                        <span class="font-bold text-green-700"><?= htmlspecialchars($_SESSION['coupon']['code']) ?></span>
+                                    </div>
+                                    <button type="button" onclick="removeCoupon()" class="text-sm text-red-500 hover:text-red-600 font-medium hover:underline">Xóa</button>
+                                </div>
+                            <?php else: ?>
+                                <div class="flex gap-2 relative">
+                                    <input type="text" id="coupon_code" placeholder="Nhập mã giảm giá..." class="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-bb-blue outline-none uppercase">
+                                    <button type="button" onclick="applyCoupon()" class="bg-gray-900 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-bb-blue transition-colors whitespace-nowrap">Áp dụng</button>
+                                </div>
+                                <p id="coupon-msg" class="text-xs mt-2 hidden"></p>
+                            <?php endif; ?>
+                        </div>
+
+                        <hr class="border-gray-100 mb-4">
+
                         <!-- Totals -->
                         <div class="space-y-2.5 text-sm">
                             <div class="flex justify-between text-gray-600">
@@ -757,7 +779,55 @@ require_once __DIR__ . '/includes/header.php';
             if (error) error.remove();
         });
     });
+
+    /**
+     * Coupon actions
+     */
+    async function applyCoupon() {
+        const codeInput = document.getElementById('coupon_code');
+        const msgEl = document.getElementById('coupon-msg');
+        const code = codeInput.value.trim();
+
+        if (!code) {
+            msgEl.textContent = 'Vui lòng nhập mã giảm giá';
+            msgEl.className = 'text-xs mt-2 text-red-500 block';
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/apply-coupon.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code })
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+                location.reload(); // Tải lại trang để áp dụng giảm giá
+            } else {
+                msgEl.textContent = data.message;
+                msgEl.className = 'text-xs mt-2 text-red-500 block';
+            }
+        } catch (error) {
+            console.error('Lỗi áp dụng mã:', error);
+            msgEl.textContent = 'Lỗi kết nối. Vui lòng thử lại sau.';
+            msgEl.className = 'text-xs mt-2 text-red-500 block';
+        }
+    }
+
+    async function removeCoupon() {
+        try {
+            const res = await fetch('/api/remove-coupon.php', { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+                location.reload();
+            }
+        } catch (error) {
+            console.error('Lỗi gỡ mã:', error);
+        }
+    }
     </script>
+
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
 
