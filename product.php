@@ -212,7 +212,7 @@ $image = getProductImage($product['image'] ?? '');
                     </div>
                     <div class="bg-white rounded-xl p-3 text-center border border-gray-100">
                         <span class="text-xl mb-1 block">🚚</span>
-                        <p class="text-xs font-medium text-gray-600">Miễn phí ship<br>từ 35 VNĐ</p>
+                        <p class="text-xs font-medium text-gray-600">Miễn phí ship<br>từ 875.000 VNĐ</p>
                     </div>
                 </div>
             </div>
@@ -353,7 +353,7 @@ $image = getProductImage($product['image'] ?? '');
                         <div class="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-2xl">📦</div>
                         <h3 class="font-bold text-gray-800">Giao hàng nhanh</h3>
                     </div>
-                    <p class="text-sm text-gray-500 leading-relaxed">Giao hàng trong 1-3 ngày làm việc. Miễn phí vận chuyển cho đơn hàng từ 35 VNĐ. Đóng gói cẩn thận, bảo hiểm hàng hóa trong quá trình vận chuyển.</p>
+                    <p class="text-sm text-gray-500 leading-relaxed">Giao hàng trong 1-3 ngày làm việc. Miễn phí vận chuyển cho đơn hàng từ 875.000 VNĐ. Đóng gói cẩn thận, bảo hiểm hàng hóa trong quá trình vận chuyển.</p>
                 </div>
                 <div class="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
                     <div class="flex items-center gap-3 mb-3">
@@ -611,7 +611,7 @@ $image = getProductImage($product['image'] ?? '');
         btn.innerHTML = 'Đang xử lý...';
         
         try {
-            const resp = await fetch('/cart_api.php', {
+            const resp = await fetch('/api/cart-ajax.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'add', variant_id: selectedVariant.id, quantity: qty })

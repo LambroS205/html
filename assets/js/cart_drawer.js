@@ -44,7 +44,7 @@ function closeCartDrawer() {
 async function fetchCartDrawer() {
     renderLoading(true);
     try {
-        const res = await fetch('/cart_api.php', {
+        const res = await fetch('/api/cart-ajax.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'get' })
@@ -74,7 +74,7 @@ async function updateCartQty(variantId, delta) {
     }
     
     try {
-        const res = await fetch('/cart_api.php', {
+        const res = await fetch('/api/cart-ajax.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'update', variant_id: variantId, quantity: newQty })
@@ -96,7 +96,7 @@ async function updateCartQty(variantId, delta) {
 async function removeCartItem(variantId) {
     renderLoading(true);
     try {
-        const res = await fetch('/cart_api.php', {
+        const res = await fetch('/api/cart-ajax.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'remove', variant_id: variantId })
@@ -126,7 +126,7 @@ async function applyCoupon() {
     
     renderLoading(true);
     try {
-        const res = await fetch('/cart_api.php', {
+        const res = await fetch('/api/cart-ajax.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'apply_coupon', code: code })
@@ -150,7 +150,7 @@ async function applyCoupon() {
 async function removeCoupon() {
     renderLoading(true);
     try {
-        const res = await fetch('/cart_api.php', {
+        const res = await fetch('/api/cart-ajax.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'remove_coupon' })

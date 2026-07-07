@@ -12,6 +12,13 @@ if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.cookie_httponly', 1); session_start();
 }
 
+// ── Bảo vệ khu vực Admin ──
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
+    header('Location: /auth/login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
+    exit;
+}
+
+
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 

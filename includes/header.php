@@ -34,7 +34,7 @@ $navCategories = $pdo->query("SELECT id, name, slug, icon FROM categories ORDER 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($pageTitle ?? 'BestBuy — Mua sắm điện tử chính hãng giá tốt nhất') ?></title>
-    <meta name="description" content="<?= htmlspecialchars($pageDescription ?? 'Cửa hàng điện tử trực tuyến — Laptop, Điện thoại, Tivi, Tai nghe chính hãng giá tốt nhất. Miễn phí vận chuyển đơn từ 35 VNĐ.') ?>">
+    <meta name="description" content="<?= htmlspecialchars($pageDescription ?? 'Cửa hàng điện tử trực tuyến — Laptop, Điện thoại, Tivi, Tai nghe chính hãng giá tốt nhất. Miễn phí vận chuyển đơn từ 875.000 VNĐ.') ?>">
     <meta name="robots" content="index, follow">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23FFE000'/><text x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' font-size='18' font-weight='900' fill='%23001E73'>B</text></svg>">
 
@@ -79,7 +79,7 @@ $navCategories = $pdo->query("SELECT id, name, slug, icon FROM categories ORDER 
                     Giao hàng toàn quốc
                 </span>
                 <span class="text-gray-600">|</span>
-                <span class="text-bb-yellow font-medium">🔥 Miễn phí vận chuyển đơn từ 35 VNĐ</span>
+                <span class="text-bb-yellow font-medium">🔥 Miễn phí vận chuyển đơn từ 875.000 VNĐ</span>
             </div>
             <div class="flex items-center gap-4">
                 <a href="#" class="hover:text-white transition-colors">Theo dõi đơn hàng</a>

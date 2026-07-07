@@ -61,7 +61,7 @@
                             <span class="text-green-400">✓</span> Thẻ Visa / Mastercard
                         </li>
                         <li class="flex items-center gap-2">
-                            <span class="text-green-400">✓</span> Miễn phí ship đơn từ 35 VNĐ
+                            <span class="text-green-400">✓</span> Miễn phí ship đơn từ 875.000 VNĐ
                         </li>
                         <li class="flex items-center gap-2">
                             <span class="text-green-400">✓</span> Giao hàng toàn quốc

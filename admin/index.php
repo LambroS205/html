@@ -223,7 +223,7 @@ $statusChartData = $pdo->query("
             data: {
                 labels: labels,
                 datasets: [{
-                    label: 'Doanh thu ($)',
+                    label: 'Doanh thu (VNĐ)',
                     data: dataRevenue,
                     borderColor: '#fdd835', // bb-yellow
                     backgroundColor: gradient,
@@ -252,7 +252,7 @@ $statusChartData = $pdo->query("
                         displayColors: false,
                         callbacks: {
                             label: function(context) {
-                                return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
+                                return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(context.parsed.y);
                             }
                         }
                     }
@@ -265,7 +265,7 @@ $statusChartData = $pdo->query("
                         beginAtZero: true,
                         ticks: {
                             callback: function(value) {
-                                return '$' + value;
+                                return new Intl.NumberFormat('vi-VN').format(value) + ' ₫';
                             }
                         }
                     }

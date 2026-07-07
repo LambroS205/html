@@ -1,4 +1,4 @@
-﻿/**
+/**
  * BestBuy Store — Main JavaScript (Upgraded)
  * Vanilla JS (ES6+) cho tương tác người dùng
  * 
@@ -305,7 +305,7 @@ async function fetchSearchResults(query, dropdown) {
 
 /* ═══════════════════════════════════════
    ADD TO CART (Quick) — AJAX
-   Gửi request đến cart_api.php, cập nhật badge
+   Gửi request đến api/cart-ajax.php, cập nhật badge
    ═══════════════════════════════════════ */
 async function addToCartQuick(productId, btnElement) {
     // Disable button & show loading
@@ -318,7 +318,7 @@ async function addToCartQuick(productId, btnElement) {
         </svg>`;
 
     try {
-        const resp = await fetch('/cart_api.php', {
+        const resp = await fetch('/api/cart-ajax.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'add', product_id: productId, quantity: 1 })
