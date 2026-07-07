@@ -65,6 +65,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'role'  => $user['role'],
             ];
 
+            // ── Merge Cart (Gộp giỏ hàng) ──
+            $userId = (int) $user['id'];
+            if (!empty($_SESSION['cart'])) {
+                $stmtInsert = $pdo->prepare("
+                    INSERT INTO cart_items (user_id, product_id, variant_id, quantity) 
+                    VALUES (:user_id, :product_id, :variant_id, :quantity)
+                    ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)
+                ");
+                foreach ($_SESSION['cart'] as $item) {
+                    if (!empty($item['variant_id'])) {
+                        $stmtInsert->execute([
+                            ':user_id' => $userId,
+                            ':product_id' => $item['product_id'],
+                            ':variant_id' => $item['variant_id'],
+                            ':quantity' => $item['quantity']
+                        ]);
+                    }
+                }
+            }
+
+            // Tải lại toàn bộ giỏ hàng từ DB vào Session
+            $_SESSION['cart'] = [];
+            $stmtFetch = $pdo->prepare("
+                SELECT c.variant_id, c.product_id, p.name, pv.price, pv.sale_price, pv.stock, pv.image_url as image, c.quantity
+                FROM cart_items c
+                JOIN product_variants pv ON c.variant_id = pv.id
+                JOIN products p ON c.product_id = p.id
+                WHERE c.user_id = :user_id
+            ");
+            $stmtFetch->execute([':user_id' => $userId]);
+            $dbCart = $stmtFetch->fetchAll();
+            
+            foreach ($dbCart as $row) {
+                $qty = (int)$row['quantity'];
+                $stock = (int)$row['stock'];
+                if ($qty > $stock) $qty = $stock;
+                
+                if ($qty > 0) {
+                    $_SESSION['cart'][(string)$row['variant_id']] = [
+                        'variant_id' => $row['variant_id'],
+                        'product_id' => $row['product_id'],
+                        'name'       => $row['name'],
+                        'price'      => (float)($row['sale_price'] ?? $row['price']),
+                        'image'      => $row['image'],
+                        'quantity'   => $qty,
+                    ];
+                    // Nếu quantity đã bị giảm do tồn kho, update lại DB
+                    if ($qty != (int)$row['quantity']) {
+                        $pdo->prepare("UPDATE cart_items SET quantity = ? WHERE user_id = ? AND variant_id = ?")->execute([$qty, $userId, $row['variant_id']]);
+                    }
+                } else {
+                    $pdo->prepare("DELETE FROM cart_items WHERE user_id = ? AND variant_id = ?")->execute([$userId, $row['variant_id']]);
+                }
+            }
+
             // Redirect — admin về admin panel, customer về trang chủ
             $redirect = $_GET['redirect'] ?? '/';
             if ($user['role'] === 'admin' && $redirect === '/') {

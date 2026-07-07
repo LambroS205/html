@@ -204,6 +204,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // 4. Clear cart & coupon session
             $_SESSION['cart'] = [];
             unset($_SESSION['coupon']);
+            if (isset($_SESSION['user'])) {
+                $pdo->prepare("DELETE FROM cart_items WHERE user_id = ?")->execute([(int)$_SESSION['user']['id']]);
+            }
 
             // 5. Nếu là VNPay -> Chuyển hướng sang VNPay
             if ($formData['payment_method'] === 'vnpay') {

@@ -86,6 +86,22 @@ try {
                 $_SESSION['cart'][$cartKey]['quantity'] = $product['stock'];
             }
 
+            // Sync with DB if logged in
+            if (isset($_SESSION['user'])) {
+                $userId = (int) $_SESSION['user']['id'];
+                $pdo->prepare("
+                    INSERT INTO cart_items (user_id, product_id, variant_id, quantity) 
+                    VALUES (?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE quantity = ?
+                ")->execute([
+                    $userId,
+                    $product['product_id'],
+                    $product['variant_id'],
+                    $_SESSION['cart'][$cartKey]['quantity'],
+                    $_SESSION['cart'][$cartKey]['quantity']
+                ]);
+            }
+
             $response = array_merge([
                 'success'   => true,
                 'message'   => 'Đã thêm vào giỏ hàng',
@@ -95,6 +111,13 @@ try {
         case 'remove':
             $cartKey = (string) $variantId;
             unset($_SESSION['cart'][$cartKey]);
+            
+            // Sync with DB if logged in
+            if (isset($_SESSION['user'])) {
+                $pdo->prepare("DELETE FROM cart_items WHERE user_id = ? AND variant_id = ?")
+                    ->execute([(int)$_SESSION['user']['id'], $variantId]);
+            }
+
             $response = array_merge([
                 'success'   => true,
                 'message'   => 'Đã xóa khỏi giỏ hàng',
@@ -106,8 +129,16 @@ try {
             if (isset($_SESSION['cart'][$cartKey])) {
                 if ($quantity <= 0) {
                     unset($_SESSION['cart'][$cartKey]);
+                    if (isset($_SESSION['user'])) {
+                        $pdo->prepare("DELETE FROM cart_items WHERE user_id = ? AND variant_id = ?")
+                            ->execute([(int)$_SESSION['user']['id'], $variantId]);
+                    }
                 } else {
                     $_SESSION['cart'][$cartKey]['quantity'] = $quantity;
+                    if (isset($_SESSION['user'])) {
+                        $pdo->prepare("UPDATE cart_items SET quantity = ? WHERE user_id = ? AND variant_id = ?")
+                            ->execute([$quantity, (int)$_SESSION['user']['id'], $variantId]);
+                    }
                 }
             }
             $response = array_merge([
