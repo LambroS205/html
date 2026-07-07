@@ -9,12 +9,7 @@
 class Database
 {
     // ── Cấu hình kết nối ──
-    private const HOST     = '127.0.0.1';
-    private const PORT     = 3306;
-    private const DBNAME   = 'bestbuy_store';
-    private const USERNAME = 'root';
-    private const PASSWORD = '';
-    private const CHARSET  = 'utf8mb4';
+    private static ?array $config = null;
 
     // ── Singleton instance ──
     private static ?PDO $instance = null;
@@ -24,6 +19,18 @@ class Database
      */
     private function __construct() {}
     private function __clone() {}
+
+    /**
+     * Load config file
+     */
+    private static function getConfig(): array
+    {
+        if (self::$config === null) {
+            $appConfig = require __DIR__ . '/app.php';
+            self::$config = $appConfig['db'];
+        }
+        return self::$config;
+    }
 
     /**
      * Lấy kết nối PDO (tạo mới nếu chưa có)
@@ -39,15 +46,16 @@ class Database
     public static function getConnection(): PDO
     {
         if (self::$instance === null) {
+            $config = self::getConfig();
             $dsn = sprintf(
                 'mysql:host=%s;port=%d;dbname=%s;charset=%s',
-                self::HOST,
-                self::PORT,
-                self::DBNAME,
-                self::CHARSET
+                $config['host'],
+                $config['port'],
+                $config['dbname'],
+                $config['charset']
             );
 
-            self::$instance = new PDO($dsn, self::USERNAME, self::PASSWORD, [
+            self::$instance = new PDO($dsn, $config['username'], $config['password'], [
                 // Ném Exception khi có lỗi SQL → dễ debug
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
 
@@ -58,8 +66,7 @@ class Database
                 // Đây là tuyến phòng thủ chính chống SQL Injection
                 PDO::ATTR_EMULATE_PREPARES   => false,
 
-                // Persistent connection → tái sử dụng kết nối giữa các request
-                PDO::ATTR_PERSISTENT         => true,
+                // Bỏ qua Persistent connection để tránh rò rỉ kết nối trên môi trường web thông thường
             ]);
         }
 

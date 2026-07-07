@@ -10,7 +10,7 @@
  */
 
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    ini_set('session.cookie_httponly', 1); session_start();
 }
 
 require_once __DIR__ . '/../config/db.php';
@@ -195,7 +195,7 @@ $navCategories = $pdo->query("SELECT id, name, slug, icon FROM categories ORDER 
                         🏠 Tất cả
                     </a>
                     <?php foreach ($navCategories as $cat): ?>
-                        <a href="/search.php?category=<?= htmlspecialchars($cat['slug']) ?>" 
+                        <a href="/danh-muc/<?= htmlspecialchars($cat['slug']) ?>" 
                            class="category-pill whitespace-nowrap px-4 py-2.5 text-sm font-medium text-white/80 hover:text-white rounded-t-lg transition-all <?= ($activeCategory ?? '') === $cat['slug'] ? 'active !text-white' : '' ?>">
                             <?= $cat['icon'] ?> <?= htmlspecialchars($cat['name']) ?>
                         </a>
@@ -225,7 +225,7 @@ $navCategories = $pdo->query("SELECT id, name, slug, icon FROM categories ORDER 
                     <span>🏠</span> <span>Tất cả sản phẩm</span>
                 </a>
                 <?php foreach ($navCategories as $cat): ?>
-                    <a href="/search.php?category=<?= htmlspecialchars($cat['slug']) ?>" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors">
+                    <a href="/danh-muc/<?= htmlspecialchars($cat['slug']) ?>" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors">
                         <span><?= $cat['icon'] ?></span> <span><?= htmlspecialchars($cat['name']) ?></span>
                     </a>
                 <?php endforeach; ?>
@@ -262,3 +262,4 @@ $navCategories = $pdo->query("SELECT id, name, slug, icon FROM categories ORDER 
 
     <!-- Main content wrapper -->
     <main class="flex-1">
+

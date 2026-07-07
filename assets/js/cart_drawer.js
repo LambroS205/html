@@ -59,17 +59,17 @@ async function fetchCartDrawer() {
     }
 }
 
-async function updateCartQty(productId, delta) {
+async function updateCartQty(variantId, delta) {
     renderLoading(true);
     // Find current qty in DOM
-    const itemEl = document.querySelector(`.drawer-item[data-id="${productId}"]`);
+    const itemEl = document.querySelector(`.drawer-item[data-id="${variantId}"]`);
     if (!itemEl) return;
     
     let currentQty = parseInt(itemEl.dataset.qty) || 1;
     let newQty = currentQty + delta;
     
     if (newQty <= 0) {
-        removeCartItem(productId);
+        removeCartItem(variantId);
         return;
     }
     
@@ -77,7 +77,7 @@ async function updateCartQty(productId, delta) {
         const res = await fetch('/cart_api.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'update', product_id: productId, quantity: newQty })
+            body: JSON.stringify({ action: 'update', variant_id: variantId, quantity: newQty })
         });
         const data = await res.json();
         if (data.success) {
@@ -93,13 +93,13 @@ async function updateCartQty(productId, delta) {
     }
 }
 
-async function removeCartItem(productId) {
+async function removeCartItem(variantId) {
     renderLoading(true);
     try {
         const res = await fetch('/cart_api.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'remove', product_id: productId })
+            body: JSON.stringify({ action: 'remove', variant_id: variantId })
         });
         const data = await res.json();
         if (data.success) {
@@ -212,8 +212,8 @@ function renderCartDrawer(data) {
     } else {
         document.getElementById('drawer-checkout-btn').style.display = 'block';
         itemsContainer.innerHTML = data.cart.map(item => `
-            <div class="drawer-item flex gap-4 bg-white p-3 rounded-xl border border-gray-100 shadow-sm relative" data-id="${item.product_id}" data-qty="${item.quantity}">
-                <button onclick="removeCartItem(${item.product_id})" class="absolute -top-2 -right-2 bg-white rounded-full p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 shadow-sm transition-colors border border-gray-100">
+            <div class="drawer-item flex gap-4 bg-white p-3 rounded-xl border border-gray-100 shadow-sm relative" data-id="${item.variant_id}" data-qty="${item.quantity}">
+                <button onclick="removeCartItem(${item.variant_id})" class="absolute -top-2 -right-2 bg-white rounded-full p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 shadow-sm transition-colors border border-gray-100">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
                 <div class="w-20 h-20 bg-gray-50 rounded-lg flex items-center justify-center shrink-0 border border-gray-100">
@@ -224,9 +224,9 @@ function renderCartDrawer(data) {
                     <div class="mt-auto flex items-end justify-between">
                         <span class="font-bold text-bb-blue">${formatPrice(item.price)}</span>
                         <div class="flex items-center border border-gray-200 rounded-lg bg-gray-50 overflow-hidden h-7">
-                            <button onclick="updateCartQty(${item.product_id}, -1)" class="px-2 text-gray-500 hover:bg-gray-200 hover:text-gray-800 font-bold transition-colors">−</button>
+                            <button onclick="updateCartQty(${item.variant_id}, -1)" class="px-2 text-gray-500 hover:bg-gray-200 hover:text-gray-800 font-bold transition-colors">−</button>
                             <span class="w-8 text-center text-xs font-semibold bg-white border-x border-gray-200 leading-7">${item.quantity}</span>
-                            <button onclick="updateCartQty(${item.product_id}, 1)" class="px-2 text-gray-500 hover:bg-gray-200 hover:text-gray-800 font-bold transition-colors">+</button>
+                            <button onclick="updateCartQty(${item.variant_id}, 1)" class="px-2 text-gray-500 hover:bg-gray-200 hover:text-gray-800 font-bold transition-colors">+</button>
                         </div>
                     </div>
                 </div>

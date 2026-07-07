@@ -7,7 +7,7 @@
  */
 
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    ini_set('session.cookie_httponly', 1); session_start();
 }
 
 // Xóa thông tin user, giữ giỏ hàng
@@ -18,3 +18,4 @@ session_regenerate_id(true);
 
 header('Location: /');
 exit;
+

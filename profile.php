@@ -11,7 +11,7 @@
  */
 
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    ini_set('session.cookie_httponly', 1); session_start();
 }
 
 // Chưa đăng nhập → redirect sang login
@@ -218,7 +218,7 @@ require_once __DIR__ . '/includes/header.php';
                                         </div>
                                         <div class="flex-1 min-w-0">
                                             <?php if (!empty($item['slug'])): ?>
-                                                <a href="/product.php?slug=<?= htmlspecialchars($item['slug']) ?>" class="text-sm font-medium text-gray-800 hover:text-bb-blue transition-colors line-clamp-1"><?= htmlspecialchars($item['product_name']) ?></a>
+                                                <a href="/<?= htmlspecialchars($item['slug']) ?>.html" class="text-sm font-medium text-gray-800 hover:text-bb-blue transition-colors line-clamp-1"><?= htmlspecialchars($item['product_name']) ?></a>
                                             <?php else: ?>
                                                 <p class="text-sm font-medium text-gray-800 line-clamp-1"><?= htmlspecialchars($item['product_name']) ?></p>
                                             <?php endif; ?>
@@ -258,3 +258,4 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
+

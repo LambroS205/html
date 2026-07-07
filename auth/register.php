@@ -11,7 +11,7 @@
  */
 
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    ini_set('session.cookie_httponly', 1); session_start();
 }
 
 // Nếu đã đăng nhập → redirect về trang chủ
@@ -245,3 +245,4 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
+

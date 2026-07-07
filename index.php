@@ -15,29 +15,41 @@ $pdo = Database::getConnection();
 
 // Featured products (có is_featured = 1) — hiển thị ở phần "Sản phẩm nổi bật"
 $featuredProducts = $pdo->query("
-    SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug
+    SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug,
+           MIN(pv.price) as price, MIN(pv.sale_price) as sale_price, SUM(pv.stock) as stock,
+           (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image
     FROM products p
     JOIN categories c ON p.category_id = c.id
+    LEFT JOIN product_variants pv ON p.id = pv.product_id
     WHERE p.is_featured = 1
+    GROUP BY p.id
     ORDER BY p.rating DESC
     LIMIT 8
 ")->fetchAll();
 
 // Deal products (có sale_price) — hiển thị ở "Deal of the Day"
 $dealProducts = $pdo->query("
-    SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug
+    SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug,
+           MIN(pv.price) as price, MIN(pv.sale_price) as sale_price, SUM(pv.stock) as stock,
+           (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image
     FROM products p
     JOIN categories c ON p.category_id = c.id
-    WHERE p.sale_price IS NOT NULL AND p.sale_price < p.price
-    ORDER BY (p.price - p.sale_price) DESC
+    JOIN product_variants pv ON p.id = pv.product_id
+    WHERE pv.sale_price IS NOT NULL AND pv.sale_price < pv.price
+    GROUP BY p.id
+    ORDER BY (MIN(pv.price) - MIN(pv.sale_price)) DESC
     LIMIT 4
 ")->fetchAll();
 
 // All products — hiển thị ở cuối trang
 $allProducts = $pdo->query("
-    SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug
+    SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug,
+           MIN(pv.price) as price, MIN(pv.sale_price) as sale_price, SUM(pv.stock) as stock,
+           (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image
     FROM products p
     JOIN categories c ON p.category_id = c.id
+    LEFT JOIN product_variants pv ON p.id = pv.product_id
+    GROUP BY p.id
     ORDER BY p.created_at DESC
 ")->fetchAll();
 
@@ -136,7 +148,7 @@ $categoriesWithCount = $pdo->query("
     <section class="max-w-7xl mx-auto px-4 -mt-8 relative z-20 mb-12">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
             <?php foreach ($categoriesWithCount as $cat): ?>
-                <a href="/search.php?category=<?= htmlspecialchars($cat['slug']) ?>" 
+                <a href="/danh-muc/<?= htmlspecialchars($cat['slug']) ?>" 
                    class="bg-white rounded-2xl p-5 flex items-center gap-4 shadow-sm hover:shadow-lg transition-all duration-300 group border border-gray-100 hover:border-bb-blue/20">
                     <span class="text-3xl md:text-4xl group-hover:scale-110 transition-transform duration-300"><?= $cat['icon'] ?></span>
                     <div>
@@ -189,7 +201,7 @@ $categoriesWithCount = $pdo->query("
                     </h3>
                     <p class="text-blue-200/60 text-sm">Áp dụng cho Sony WH-1000XM5 & AirPods Pro 3. Số lượng có hạn.</p>
                 </div>
-                <a href="/search.php?category=tai-nghe" class="shrink-0 bg-bb-yellow text-bb-dark font-bold px-8 py-3 rounded-full hover:bg-yellow-300 transition-all transform hover:scale-105 shadow-lg">
+                <a href="/danh-muc/tai-nghe" class="shrink-0 bg-bb-yellow text-bb-dark font-bold px-8 py-3 rounded-full hover:bg-yellow-300 transition-all transform hover:scale-105 shadow-lg">
                     Xem ngay →
                 </a>
             </div>

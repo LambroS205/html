@@ -52,18 +52,13 @@ function calcDiscount(float $originalPrice, float $salePrice): int
 }
 
 /**
- * Lấy đường dẫn ảnh sản phẩm có fallback
- * Nếu file ảnh không tồn tại, trả về empty string (template sẽ hiển thị icon thay thế)
+ * Lấy đường dẫn ảnh sản phẩm có fallback.
+ * Tối ưu hóa: Bỏ check file_exists để tránh thắt cổ chai I/O, frontend có thể handle lỗi load ảnh nếu cần.
  */
 function getProductImage(?string $imagePath): string
 {
     if (empty($imagePath)) return '';
-    
-    $fullPath = $_SERVER['DOCUMENT_ROOT'] . '/' . ltrim($imagePath, '/');
-    if (file_exists($fullPath)) {
-        return '/' . ltrim($imagePath, '/');
-    }
-    return '';
+    return '/' . ltrim($imagePath, '/');
 }
 
 /**
@@ -105,30 +100,29 @@ function renderProductCard(array $product): string
         : '<span class="text-6xl opacity-60 group-hover:scale-110 transition-transform duration-500">' . $catIcon . '</span>';
 
     $priceHtml = $salePrice
-        ? '<span class="text-lg font-bold text-bb-blue">' . formatPrice($salePrice) . '</span>
+        ? '<span class="text-xs text-gray-500 mr-1">Từ</span><span class="text-lg font-bold text-bb-blue">' . formatPrice($salePrice) . '</span>
            <span class="text-sm text-gray-400 line-through ml-1">' . formatPrice($price) . '</span>'
-        : '<span class="text-lg font-bold text-bb-blue">' . formatPrice($price) . '</span>';
+        : '<span class="text-xs text-gray-500 mr-1">Từ</span><span class="text-lg font-bold text-bb-blue">' . formatPrice($price) . '</span>';
 
     $stars = renderStars($rating, $reviews);
 
     $addToCartBtn = $stock > 0
-        ? '<button onclick="addToCartQuick(' . (int)$product['id'] . ', this)" class="w-full bg-bb-yellow text-bb-dark font-semibold py-2.5 rounded-lg hover:bg-yellow-300 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2">
-               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"></path></svg>
-               Thêm vào giỏ
-           </button>'
+        ? '<a href="/' . $slug . '.html" class="w-full bg-bb-yellow text-bb-dark font-semibold py-2.5 rounded-lg hover:bg-yellow-300 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2">
+               Tùy chọn
+           </a>'
         : '<button disabled class="w-full bg-gray-200 text-gray-500 font-semibold py-2.5 rounded-lg cursor-not-allowed">Hết hàng</button>';
 
     return '
     <div class="product-card bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 group border border-gray-100 flex flex-col">
         <!-- Image -->
-        <a href="/product.php?slug=' . $slug . '" class="relative overflow-hidden aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+        <a href="/' . $slug . '.html" class="relative overflow-hidden aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
             ' . $discountBadge . $stockBadge . '
             ' . $imageHtml . '
         </a>
         <!-- Info -->
         <div class="p-4 flex flex-col flex-1">
             <p class="text-xs text-gray-400 mb-1 uppercase tracking-wide">' . $catIcon . ' ' . $catName . '</p>
-            <a href="/product.php?slug=' . $slug . '" class="font-semibold text-sm text-gray-800 mb-2 line-clamp-2 min-h-[2.5rem] hover:text-bb-blue transition-colors">' . $name . '</a>
+            <a href="/' . $slug . '.html" class="font-semibold text-sm text-gray-800 mb-2 line-clamp-2 min-h-[2.5rem] hover:text-bb-blue transition-colors">' . $name . '</a>
             ' . $stars . '
             <div class="flex items-baseline gap-1 mt-2 mb-3">
                 ' . $priceHtml . '
@@ -150,7 +144,7 @@ function renderProductCard(array $product): string
 function generateCsrfToken(): string
 {
     if (session_status() === PHP_SESSION_NONE) {
-        session_start();
+        ini_set('session.cookie_httponly', 1); session_start();
     }
     if (empty($_SESSION['csrf_token'])) {
         try {
@@ -180,7 +174,7 @@ function verifyCsrfToken()
 {
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (session_status() === PHP_SESSION_NONE) {
-            session_start();
+            ini_set('session.cookie_httponly', 1); session_start();
         }
         $sessionToken = $_SESSION['csrf_token'] ?? '';
         $postToken    = $_POST['csrf_token'] ?? '';
@@ -191,3 +185,52 @@ function verifyCsrfToken()
         }
     }
 }
+
+/**
+ * Cập nhật điểm đánh giá theo công thức Bayesian cho một sản phẩm
+ * Bayesian Rating = (v * R + m * C) / (v + m)
+ * v: Số lượng đánh giá của sản phẩm hiện tại.
+ * R: Điểm đánh giá trung bình thực tế của sản phẩm.
+ * m: Số lượng đánh giá tối thiểu (m = 5).
+ * C: Điểm đánh giá trung bình của toàn bộ các sản phẩm.
+ *
+ * @param PDO $pdo Kết nối database
+ * @param int $productId ID sản phẩm cần cập nhật
+ */
+function updateBayesianRating(PDO $pdo, int $productId): void
+{
+    $m = 5;
+
+    // 1. Tính C (Trung bình điểm đánh giá của toàn bộ hệ thống)
+    // Lấy tất cả các đánh giá có trong hệ thống
+    $stmtC = $pdo->query("SELECT AVG(rating) as avg_rating FROM reviews");
+    $globalAvg = (float) $stmtC->fetchColumn();
+    $C = $globalAvg > 0 ? $globalAvg : 0;
+
+    // 2. Tính v (Số lượng đánh giá của sản phẩm) và R (Điểm trung bình của sản phẩm)
+    $stmtProduct = $pdo->prepare("SELECT COUNT(id) as review_count, AVG(rating) as avg_rating FROM reviews WHERE product_id = :product_id");
+    $stmtProduct->execute([':product_id' => $productId]);
+    $productStats = $stmtProduct->fetch();
+
+    $v = (int) $productStats['review_count'];
+    $R = (float) $productStats['avg_rating'];
+
+    // 3. Tính Bayesian Rating
+    if ($v == 0) {
+        $bayesianRating = 0;
+    } else {
+        $bayesianRating = ($v * $R + $m * $C) / ($v + $m);
+    }
+
+    // Làm tròn đến 1 chữ số thập phân
+    $bayesianRating = round($bayesianRating, 1);
+
+    // 4. Cập nhật vào bảng products
+    $stmtUpdate = $pdo->prepare("UPDATE products SET rating = :rating, review_count = :review_count WHERE id = :id");
+    $stmtUpdate->execute([
+        ':rating' => $bayesianRating,
+        ':review_count' => $v,
+        ':id' => $productId
+    ]);
+}
+

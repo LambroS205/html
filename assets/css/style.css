@@ -507,3 +507,7 @@ body {
 .no-scrollbar::-webkit-scrollbar {
     display: none;
 }
+/* Admin Sidebar Styles */
+.nav-link { transition: all 0.2s; }
+.nav-link:hover, .nav-link.active { background: rgba(255,224,0,0.08); color: #FFE000; }
+.nav-link.active { border-right: 3px solid #FFE000; }

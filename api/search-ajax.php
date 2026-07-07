@@ -15,7 +15,7 @@
  */
 
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    ini_set('session.cookie_httponly', 1); session_start();
 }
 
 header('Content-Type: application/json; charset=utf-8');
@@ -58,13 +58,16 @@ try {
         
         $sql = "
             SELECT 
-                p.id, p.name, p.slug, p.price, p.sale_price, p.image, p.stock,
+                p.id, p.name, p.slug, 
+                MIN(pv.price) as price, MIN(pv.sale_price) as sale_price, MAX(pv.image_url) as image, SUM(pv.stock) as stock,
                 c.name AS category_name, c.icon AS category_icon,
                 MATCH(p.name, p.description) AGAINST(:ft_query IN BOOLEAN MODE) AS relevance
             FROM products p
             JOIN categories c ON p.category_id = c.id
+            LEFT JOIN product_variants pv ON p.id = pv.product_id
             WHERE MATCH(p.name, p.description) AGAINST(:ft_query2 IN BOOLEAN MODE)
                OR p.name LIKE :like_query
+            GROUP BY p.id
             ORDER BY relevance DESC, p.rating DESC
             LIMIT 8
         ";
@@ -79,11 +82,14 @@ try {
         // LIKE fallback cho từ khóa ngắn (2 ký tự)
         $sql = "
             SELECT 
-                p.id, p.name, p.slug, p.price, p.sale_price, p.image, p.stock,
+                p.id, p.name, p.slug, 
+                MIN(pv.price) as price, MIN(pv.sale_price) as sale_price, MAX(pv.image_url) as image, SUM(pv.stock) as stock,
                 c.name AS category_name, c.icon AS category_icon
             FROM products p
             JOIN categories c ON p.category_id = c.id
+            LEFT JOIN product_variants pv ON p.id = pv.product_id
             WHERE p.name LIKE :like_query
+            GROUP BY p.id
             ORDER BY p.rating DESC, p.review_count DESC
             LIMIT 8
         ";
@@ -127,3 +133,4 @@ try {
         'error'   => 'Database error',
     ], JSON_UNESCAPED_UNICODE);
 }
+

@@ -9,7 +9,7 @@
  */
 
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    ini_set('session.cookie_httponly', 1); session_start();
 }
 
 require_once __DIR__ . '/../../config/db.php';
@@ -49,12 +49,7 @@ $statRevenue  = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM orders")->fetch
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <style>
-        * { scrollbar-width: thin; scrollbar-color: #334155 #0f172a; }
-        .nav-link { transition: all 0.2s; }
-        .nav-link:hover, .nav-link.active { background: rgba(255,224,0,0.08); color: #FFE000; }
-        .nav-link.active { border-right: 3px solid #FFE000; }
-    </style>
+    <link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body class="font-inter bg-admin-bg text-gray-200 min-h-screen">
     <div class="flex min-h-screen">
@@ -125,3 +120,5 @@ $statRevenue  = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM orders")->fetch
 
             <!-- Page Content -->
             <main class="p-6">
+
+

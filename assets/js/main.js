@@ -1,4 +1,4 @@
-/**
+﻿/**
  * BestBuy Store — Main JavaScript (Upgraded)
  * Vanilla JS (ES6+) cho tương tác người dùng
  * 
@@ -272,9 +272,9 @@ async function fetchSearchResults(query, dropdown) {
                     </div>
                     <div class="text-right shrink-0">
                         <span class="text-sm font-bold ${hasDiscount ? 'text-red-500' : 'text-bb-blue'} whitespace-nowrap">
-                            $${parseFloat(displayPrice).toFixed(2)}
+                            ${new Intl.NumberFormat('vi-VN').format(displayPrice)} VNĐ
                         </span>
-                        ${hasDiscount ? `<span class="block text-[10px] text-gray-400 line-through">$${parseFloat(p.price).toFixed(2)}</span>` : ''}
+                        ${hasDiscount ? `<span class="block text-[10px] text-gray-400 line-through">${new Intl.NumberFormat('vi-VN').format(p.price)} VNĐ</span>` : ''}
                     </div>
                 </a>`;
             }).join('');
@@ -480,3 +480,8 @@ function escapeHtml(str) {
     div.textContent = str;
     return div.innerHTML;
 }
+/* Admin Utilities */
+function confirmDelete(msg) {
+    return confirm(msg || 'B?n c� ch?c ch?n mu?n x�a?');
+}
+

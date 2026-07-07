@@ -14,7 +14,7 @@
  */
 
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    ini_set('session.cookie_httponly', 1); session_start();
 }
 
 require_once __DIR__ . '/config/db.php';
@@ -180,14 +180,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // 2. Insert từng item vào bảng order_items
             $itemStmt = $pdo->prepare("
-                INSERT INTO order_items (order_id, product_id, product_name, price, quantity)
-                VALUES (:order_id, :product_id, :product_name, :price, :quantity)
+                INSERT INTO order_items (order_id, product_id, variant_id, product_name, price, quantity)
+                VALUES (:order_id, :product_id, :variant_id, :product_name, :price, :quantity)
             ");
 
             foreach ($cartItems as $item) {
                 $itemStmt->execute([
                     ':order_id'     => $orderId,
                     ':product_id'   => (int) $item['product_id'],
+                    ':variant_id'   => (int) $item['variant_id'],
                     ':product_name' => $item['name'],
                     ':price'        => (float) $item['price'],
                     ':quantity'     => (int) $item['quantity'],
@@ -756,3 +757,4 @@ require_once __DIR__ . '/includes/header.php';
     </script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
+

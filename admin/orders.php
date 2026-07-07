@@ -120,7 +120,7 @@ if ($action === 'view'):
                             </div>
                             <div class="flex-1 min-w-0">
                                 <?php if ($item['slug']): ?>
-                                    <a href="/product.php?slug=<?= htmlspecialchars($item['slug']) ?>" target="_blank" class="text-sm font-medium text-white hover:text-bb-yellow truncate block">
+                                    <a href="/<?= htmlspecialchars($item['slug']) ?>.html" target="_blank" class="text-sm font-medium text-white hover:text-bb-yellow truncate block">
                                         <?= htmlspecialchars($item['product_name']) ?>
                                     </a>
                                 <?php else: ?>
@@ -197,6 +197,7 @@ if ($action === 'view'):
                 <div class="bg-admin-card rounded-2xl border border-admin-border p-5">
                     <h3 class="font-bold text-white text-sm mb-4">Cập nhật trạng thái</h3>
                     <form method="POST" action="/admin/orders.php">
+        <?= csrfField() ?>
                         <input type="hidden" name="action" value="update_status">
                         <input type="hidden" name="order_id" value="<?= $order['id'] ?>">
                         <input type="hidden" name="return_view" value="1">
@@ -313,3 +314,4 @@ if ($action === 'view'):
 <?php endif; ?>
 
 <?php require_once __DIR__ . '/includes/admin_footer.php'; ?>
+

@@ -11,7 +11,7 @@
  */
 
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    ini_set('session.cookie_httponly', 1); session_start();
 }
 
 require_once __DIR__ . '/config/db.php';
@@ -45,15 +45,15 @@ if ($categorySlug !== '') {
 
 // Chỉ deal giảm giá
 if ($dealsOnly === 1) {
-    $whereClauses[] = "p.sale_price IS NOT NULL AND p.sale_price < p.price";
+    $whereClauses[] = "pv.sale_price IS NOT NULL AND pv.sale_price < pv.price";
 }
 
 $whereSQL = !empty($whereClauses) ? 'WHERE ' . implode(' AND ', $whereClauses) : '';
 
 // Sắp xếp
 $orderMap = [
-    'price_asc'  => 'COALESCE(p.sale_price, p.price) ASC',
-    'price_desc' => 'COALESCE(p.sale_price, p.price) DESC',
+    'price_asc'  => 'MIN(COALESCE(pv.sale_price, pv.price)) ASC',
+    'price_desc' => 'MIN(COALESCE(pv.sale_price, pv.price)) DESC',
     'rating'     => 'p.rating DESC, p.review_count DESC',
     'newest'     => 'p.created_at DESC',
     'name'       => 'p.name ASC',
@@ -61,10 +61,14 @@ $orderMap = [
 $orderSQL = $orderMap[$sortBy] ?? $orderMap['newest'];
 
 $sql = "
-    SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug
+    SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug,
+           MIN(pv.price) as price, MIN(pv.sale_price) as sale_price, SUM(pv.stock) as stock,
+           (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image
     FROM products p
     JOIN categories c ON p.category_id = c.id
+    LEFT JOIN product_variants pv ON p.id = pv.product_id
     {$whereSQL}
+    GROUP BY p.id
     ORDER BY {$orderSQL}
 ";
 
@@ -149,8 +153,8 @@ require_once __DIR__ . '/includes/header.php';
                             </a>
                             <?php foreach ($allCategories as $cat): ?>
                                 <?php
-                                    $catUrl = '/search.php?category=' . urlencode($cat['slug']);
-                                    if ($searchQuery) $catUrl .= '&q=' . urlencode($searchQuery);
+                                    $catUrl = '/danh-muc/' . urlencode($cat['slug']);
+                                    if ($searchQuery) $catUrl .= '?q=' . urlencode($searchQuery);
                                     $isActive = $categorySlug === $cat['slug'];
                                 ?>
                                 <a href="<?= $catUrl ?>" 
@@ -247,3 +251,4 @@ require_once __DIR__ . '/includes/header.php';
     </script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
+

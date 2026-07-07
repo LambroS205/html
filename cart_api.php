@@ -3,12 +3,12 @@
  * Cart API — AJAX Endpoint cho giỏ hàng
  * Xử lý: add, remove, update, get
  * 
- * Request: POST JSON { action, product_id, quantity }
+ * Request: POST JSON { action, variant_id, quantity }
  * Response: JSON { success, message, cartCount, cart }
  */
 
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    ini_set('session.cookie_httponly', 1); session_start();
 }
 
 header('Content-Type: application/json; charset=utf-8');
@@ -31,7 +31,7 @@ if (!$input) {
 }
 
 $action    = $input['action'] ?? '';
-$productId = (int) ($input['product_id'] ?? 0);
+$variantId = (int) ($input['variant_id'] ?? 0);
 $quantity  = max(1, (int) ($input['quantity'] ?? 1));
 
 // Khởi tạo cart trong session nếu chưa có
@@ -44,13 +44,18 @@ $pdo = Database::getConnection();
 try {
     switch ($action) {
         case 'add':
-            if ($productId <= 0) {
-                throw new Exception('Product ID không hợp lệ');
+            if ($variantId <= 0) {
+                throw new Exception('Variant ID không hợp lệ');
             }
 
             // Kiểm tra sản phẩm tồn tại & còn hàng
-            $stmt = $pdo->prepare("SELECT id, name, price, sale_price, stock, image FROM products WHERE id = :id LIMIT 1");
-            $stmt->execute([':id' => $productId]);
+            $stmt = $pdo->prepare("
+                SELECT pv.id as variant_id, p.id as product_id, p.name, pv.price, pv.sale_price, pv.stock, pv.image_url as image 
+                FROM product_variants pv 
+                JOIN products p ON pv.product_id = p.id 
+                WHERE pv.id = :id LIMIT 1
+            ");
+            $stmt->execute([':id' => $variantId]);
             $product = $stmt->fetch();
 
             if (!$product) {
@@ -62,12 +67,13 @@ try {
             }
 
             // Thêm hoặc tăng số lượng trong cart
-            $cartKey = (string) $productId;
+            $cartKey = (string) $variantId;
             if (isset($_SESSION['cart'][$cartKey])) {
                 $_SESSION['cart'][$cartKey]['quantity'] += $quantity;
             } else {
                 $_SESSION['cart'][$cartKey] = [
-                    'product_id' => $product['id'],
+                    'variant_id' => $product['variant_id'],
+                    'product_id' => $product['product_id'],
                     'name'       => $product['name'],
                     'price'      => (float) ($product['sale_price'] ?? $product['price']),
                     'image'      => $product['image'],
@@ -87,7 +93,7 @@ try {
             break;
 
         case 'remove':
-            $cartKey = (string) $productId;
+            $cartKey = (string) $variantId;
             unset($_SESSION['cart'][$cartKey]);
             $response = array_merge([
                 'success'   => true,
@@ -96,7 +102,7 @@ try {
             break;
 
         case 'update':
-            $cartKey = (string) $productId;
+            $cartKey = (string) $variantId;
             if (isset($_SESSION['cart'][$cartKey])) {
                 if ($quantity <= 0) {
                     unset($_SESSION['cart'][$cartKey]);
@@ -186,10 +192,18 @@ function getCartSummary(): array
     $subtotal = 0;
     $totalItems = 0;
 
-    foreach ($cartItems as $item) {
+    foreach ($cartItems as $key => $item) {
+        // Tự động dọn dẹp các item bị lỗi (do session cũ trước khi migrate variant)
+        if (empty($item['variant_id'])) {
+            unset($_SESSION['cart'][$key]);
+            continue;
+        }
         $subtotal += (float) $item['price'] * (int) $item['quantity'];
         $totalItems += (int) $item['quantity'];
     }
+    
+    // Refresh lại cart items sau khi đã dọn dẹp
+    $cartItems = $_SESSION['cart'] ?? [];
 
     $discount = 0;
     $couponData = null;
@@ -234,3 +248,4 @@ function getCartSummary(): array
         'freeShippingThreshold' => $freeShippingThreshold
     ];
 }
+

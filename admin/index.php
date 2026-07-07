@@ -12,7 +12,7 @@ require_once __DIR__ . '/includes/admin_header.php';
 // ── Stats ──
 $todayOrders  = $pdo->query("SELECT COUNT(*) FROM orders WHERE DATE(created_at) = CURDATE()")->fetchColumn();
 $pendingOrders = $pdo->query("SELECT COUNT(*) FROM orders WHERE status = 'pending'")->fetchColumn();
-$lowStock     = $pdo->query("SELECT COUNT(*) FROM products WHERE stock <= 5")->fetchColumn();
+$lowStock     = $pdo->query("SELECT COUNT(*) FROM product_variants WHERE stock <= 5")->fetchColumn();
 
 // ── Đơn hàng gần đây ──
 $recentOrders = $pdo->query("
@@ -25,9 +25,12 @@ $recentOrders = $pdo->query("
 
 // ── Sản phẩm bán chạy ──
 $topProducts = $pdo->query("
-    SELECT p.id, p.name, p.image, p.price, p.sale_price, p.stock, c.icon AS category_icon,
+    SELECT p.id, p.name, c.icon AS category_icon,
+           MIN(pv.price) as price, MIN(pv.sale_price) as sale_price, SUM(pv.stock) as stock,
+           (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image,
            COALESCE(SUM(oi.quantity), 0) AS total_sold
     FROM products p
+    LEFT JOIN product_variants pv ON pv.product_id = p.id
     LEFT JOIN order_items oi ON oi.product_id = p.id
     LEFT JOIN categories c ON c.id = p.category_id
     GROUP BY p.id

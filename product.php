@@ -8,7 +8,7 @@
  */
 
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    ini_set('session.cookie_httponly', 1); session_start();
 }
 
 require_once __DIR__ . '/config/db.php';
@@ -48,33 +48,101 @@ if (!$product) {
     exit;
 }
 
-// ── Parse specs JSON ──
-$specs = [];
-if (!empty($product['specs'])) {
-    $decoded = json_decode($product['specs'], true);
-    if (is_array($decoded)) {
-        $specs = $decoded;
+// ── Fetch Variants & Attributes ──
+$variantsStmt = $pdo->prepare("
+    SELECT pv.*, 
+           GROUP_CONCAT(av.id ORDER BY a.id ASC) as attribute_value_ids
+    FROM product_variants pv
+    LEFT JOIN variant_attribute_values vav ON pv.id = vav.variant_id
+    LEFT JOIN attribute_values av ON vav.attribute_value_id = av.id
+    LEFT JOIN attributes a ON av.attribute_id = a.id
+    WHERE pv.product_id = :product_id
+    GROUP BY pv.id
+    ORDER BY pv.price ASC
+");
+$variantsStmt->execute([':product_id' => $product['id']]);
+$variants = $variantsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$attrsStmt = $pdo->prepare("
+    SELECT a.id as attribute_id, a.name as attribute_name, av.id as value_id, av.value 
+    FROM attributes a
+    JOIN attribute_values av ON a.id = av.attribute_id
+    JOIN variant_attribute_values vav ON av.id = vav.attribute_value_id
+    JOIN product_variants pv ON vav.variant_id = pv.id
+    WHERE pv.product_id = :product_id
+    GROUP BY a.id, av.id
+    ORDER BY a.id ASC, av.id ASC
+");
+$attrsStmt->execute([':product_id' => $product['id']]);
+$attributesRaw = $attrsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$attributes = [];
+foreach ($attributesRaw as $row) {
+    if (!isset($attributes[$row['attribute_id']])) {
+        $attributes[$row['attribute_id']] = [
+            'name' => $row['attribute_name'],
+            'values' => []
+        ];
     }
+    $attributes[$row['attribute_id']]['values'][$row['value_id']] = $row['value'];
 }
 
-// ── Tính giá ──
-$price     = (float) $product['price'];
-$salePrice = $product['sale_price'] ? (float) $product['sale_price'] : null;
+// Lấy variant mặc định (variant đầu tiên)
+$defaultVariant = $variants[0] ?? null;
+$price = $defaultVariant ? (float) $defaultVariant['price'] : 0;
+$salePrice = ($defaultVariant && $defaultVariant['sale_price']) ? (float) $defaultVariant['sale_price'] : null;
 $displayPrice = $salePrice ?? $price;
-$savings   = $salePrice ? ($price - $salePrice) : 0;
+$savings = $salePrice ? ($price - $salePrice) : 0;
 $discountPct = $salePrice ? calcDiscount($price, $salePrice) : 0;
+$stock = $defaultVariant ? (int) $defaultVariant['stock'] : 0;
+$productImage = $defaultVariant && !empty($defaultVariant['image_url']) ? $defaultVariant['image_url'] : null;
 
 // ── Sản phẩm liên quan (cùng danh mục, khác ID) ──
 $relatedStmt = $pdo->prepare("
-    SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug
+    SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug,
+           MIN(pv.price) as price, MIN(pv.sale_price) as sale_price, SUM(pv.stock) as stock,
+           (SELECT image_url FROM product_variants WHERE product_id = p.id ORDER BY id ASC LIMIT 1) as image
     FROM products p
     JOIN categories c ON p.category_id = c.id
+    LEFT JOIN product_variants pv ON p.id = pv.product_id
     WHERE p.category_id = :cat_id AND p.id != :product_id
+    GROUP BY p.id
     ORDER BY p.rating DESC
     LIMIT 4
 ");
 $relatedStmt->execute([':cat_id' => $product['category_id'], ':product_id' => $product['id']]);
 $relatedProducts = $relatedStmt->fetchAll();
+
+// ── Đánh giá sản phẩm (Reviews) ──
+$reviewsStmt = $pdo->prepare("
+    SELECT r.*, u.name as user_name 
+    FROM reviews r 
+    JOIN users u ON r.user_id = u.id 
+    WHERE r.product_id = :product_id 
+    ORDER BY r.created_at DESC
+");
+$reviewsStmt->execute([':product_id' => $product['id']]);
+$reviews = $reviewsStmt->fetchAll();
+
+// Kiểm tra quyền đánh giá (đã đăng nhập, đã mua và chưa đánh giá)
+$canReview = false;
+if (!empty($_SESSION['user']['id'])) {
+    $userId = $_SESSION['user']['id'];
+    $checkPurchase = $pdo->prepare("
+        SELECT COUNT(oi.id) FROM order_items oi 
+        JOIN orders o ON oi.order_id = o.id 
+        WHERE oi.product_id = :product_id AND o.user_id = :user_id AND o.status = 'delivered'
+    ");
+    $checkPurchase->execute([':product_id' => $product['id'], ':user_id' => $userId]);
+    
+    if ($checkPurchase->fetchColumn() > 0) {
+        $checkReviewed = $pdo->prepare("SELECT id FROM reviews WHERE product_id = :product_id AND user_id = :user_id");
+        $checkReviewed->execute([':product_id' => $product['id'], ':user_id' => $userId]);
+        if (!$checkReviewed->fetch()) {
+            $canReview = true;
+        }
+    }
+}
 
 // ── Page meta ──
 $pageTitle = htmlspecialchars($product['name']) . ' — BestBuy Store';
@@ -103,7 +171,7 @@ $image = getProductImage($product['image'] ?? '');
         <nav class="flex items-center gap-2 text-sm text-gray-400 mb-6 flex-wrap">
             <a href="/" class="hover:text-bb-blue transition-colors">Trang chủ</a>
             <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-            <a href="/search.php?category=<?= htmlspecialchars($product['category_slug']) ?>" class="hover:text-bb-blue transition-colors">
+            <a href="/danh-muc/<?= htmlspecialchars($product['category_slug']) ?>" class="hover:text-bb-blue transition-colors">
                 <?= $product['category_icon'] ?> <?= htmlspecialchars($product['category_name']) ?>
             </a>
             <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
@@ -123,8 +191,8 @@ $image = getProductImage($product['image'] ?? '');
                     <?php endif; ?>
 
                     <div class="aspect-square flex items-center justify-center p-8 md:p-12 cursor-zoom-in overflow-hidden" id="product-image-container">
-                        <?php if ($image): ?>
-                            <img src="<?= htmlspecialchars($image) ?>" 
+                        <?php if ($productImage): ?>
+                            <img src="<?= htmlspecialchars('/' . ltrim($productImage, '/')) ?>" 
                                  alt="<?= htmlspecialchars($product['name']) ?>" 
                                  class="max-w-full max-h-full object-contain transition-transform duration-500 group-hover:scale-125"
                                  id="product-main-image">
@@ -154,7 +222,7 @@ $image = getProductImage($product['image'] ?? '');
             <!-- ── RIGHT: Product Details ── -->
             <div class="space-y-5">
                 <!-- Category badge -->
-                <a href="/search.php?category=<?= htmlspecialchars($product['category_slug']) ?>" 
+                <a href="/danh-muc/<?= htmlspecialchars($product['category_slug']) ?>" 
                    class="inline-flex items-center gap-1.5 text-sm text-bb-blue bg-blue-50 px-3 py-1 rounded-full hover:bg-blue-100 transition-colors">
                     <?= $product['category_icon'] ?> <?= htmlspecialchars($product['category_name']) ?>
                 </a>
@@ -174,10 +242,8 @@ $image = getProductImage($product['image'] ?? '');
                 <!-- Price Section -->
                 <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-5 border border-blue-100">
                     <div class="flex items-baseline gap-3 mb-1">
-                        <span class="text-3xl md:text-4xl font-black text-bb-blue"><?= formatPrice($displayPrice) ?></span>
-                        <?php if ($salePrice): ?>
-                            <span class="text-lg text-gray-400 line-through"><?= formatPrice($price) ?></span>
-                        <?php endif; ?>
+                        <span id="display-price" class="text-3xl md:text-4xl font-black text-bb-blue"><?= formatPrice($displayPrice) ?></span>
+                        <span id="original-price" class="text-lg text-gray-400 line-through <?= $salePrice ? '' : 'hidden' ?>"><?= formatPrice($price) ?></span>
                     </div>
                     <?php if ($savings > 0): ?>
                         <p class="text-sm font-semibold text-green-600 flex items-center gap-1">
@@ -189,51 +255,51 @@ $image = getProductImage($product['image'] ?? '');
                 </div>
 
                 <!-- Stock Status -->
-                <div class="flex items-center gap-2">
-                    <?php if ($product['stock'] > 10): ?>
-                        <span class="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse"></span>
-                        <span class="text-sm font-medium text-green-600">Còn hàng</span>
-                    <?php elseif ($product['stock'] > 0): ?>
-                        <span class="w-2.5 h-2.5 bg-orange-500 rounded-full animate-pulse"></span>
-                        <span class="text-sm font-medium text-orange-600">Chỉ còn <?= $product['stock'] ?> sản phẩm — Nhanh tay!</span>
-                    <?php else: ?>
-                        <span class="w-2.5 h-2.5 bg-red-500 rounded-full"></span>
-                        <span class="text-sm font-medium text-red-600">Hết hàng</span>
-                    <?php endif; ?>
+                <div id="stock-status" class="flex items-center gap-2">
+                    <!-- Updated by JS -->
                 </div>
 
+                <!-- Attributes Selection -->
+                <?php if (!empty($attributes)): ?>
+                    <div class="space-y-4 py-2 border-t border-b border-gray-100 mt-4 mb-4">
+                        <?php foreach ($attributes as $attrId => $attr): ?>
+                            <div>
+                                <h3 class="text-sm font-semibold text-gray-800 mb-2"><?= htmlspecialchars($attr['name']) ?></h3>
+                                <div class="flex flex-wrap gap-2 attribute-group" data-attr-id="<?= $attrId ?>">
+                                    <?php foreach ($attr['values'] as $valId => $valStr): ?>
+                                        <button type="button" class="variant-btn border-2 border-gray-200 bg-white rounded-lg px-4 py-2 text-sm font-medium hover:border-bb-blue transition-colors focus:outline-none" data-val-id="<?= $valId ?>">
+                                            <?= htmlspecialchars($valStr) ?>
+                                        </button>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+
                 <!-- Quantity + Add to Cart -->
-                <?php if ($product['stock'] > 0): ?>
-                <div class="flex flex-col sm:flex-row gap-3">
+                <div id="add-to-cart-section" class="flex flex-col sm:flex-row gap-3 hidden">
                     <!-- Quantity Selector -->
                     <div class="flex items-center border-2 border-gray-200 rounded-xl overflow-hidden bg-white">
                         <button type="button" onclick="changeQty(-1)" class="px-4 py-3 text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors text-lg font-bold">−</button>
-                        <input type="number" id="product-qty" value="1" min="1" max="<?= $product['stock'] ?>" 
+                        <input type="number" id="product-qty" value="1" min="1" max="1" 
                                class="w-16 text-center text-lg font-semibold border-x-2 border-gray-200 py-3 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none">
                         <button type="button" onclick="changeQty(1)" class="px-4 py-3 text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors text-lg font-bold">+</button>
                     </div>
 
                     <!-- Add to Cart Button -->
-                    <button id="add-to-cart-btn" onclick="addToCartDetail(<?= $product['id'] ?>)" 
+                    <button id="add-to-cart-btn" onclick="addToCartVariant()" 
                             class="flex-1 bg-bb-yellow text-bb-dark font-bold py-3.5 px-8 rounded-xl hover:bg-yellow-300 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-yellow-500/20 text-base">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"></path></svg>
                         Thêm vào giỏ hàng
                     </button>
                 </div>
-                <?php else: ?>
-                <div class="bg-gray-100 rounded-xl p-4 text-center">
-                    <p class="text-gray-500 font-medium">Sản phẩm tạm hết hàng</p>
-                    <p class="text-sm text-gray-400 mt-1">Vui lòng quay lại sau hoặc xem sản phẩm tương tự bên dưới.</p>
-                </div>
-                <?php endif; ?>
 
                 <!-- Buy Now -->
-                <?php if ($product['stock'] > 0): ?>
-                <a href="/checkout.php" onclick="addToCartDetail(<?= $product['id'] ?>); return true;" 
-                   class="block w-full text-center bg-bb-blue text-white font-bold py-3.5 px-8 rounded-xl hover:bg-bb-dark transition-colors">
+                <button id="buy-now-btn" onclick="buyNowVariant()" 
+                   class="block w-full text-center bg-bb-blue text-white font-bold py-3.5 px-8 rounded-xl hover:bg-bb-dark transition-colors hidden">
                     Mua ngay
-                </a>
-                <?php endif; ?>
+                </button>
 
                 <!-- Description -->
                 <?php if (!empty($product['description'])): ?>
@@ -301,6 +367,82 @@ $image = getProductImage($product['image'] ?? '');
             </div>
         </section>
 
+        <!-- ═══ PRODUCT REVIEWS ═══ -->
+        <section class="mb-12">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden p-6 md:p-8">
+                <h2 class="text-xl md:text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                    <svg class="w-6 h-6 text-bb-yellow" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                    Đánh giá từ khách hàng (<?= count($reviews) ?>)
+                </h2>
+
+                <?php if ($canReview): ?>
+                <div class="bg-gray-50 rounded-xl p-5 mb-8 border border-gray-100">
+                    <h3 class="font-bold text-gray-800 mb-3">Viết đánh giá của bạn</h3>
+                    <form id="review-form" onsubmit="submitReview(event, <?= $product['id'] ?>)">
+                        <div class="mb-3">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Đánh giá sao:</label>
+                            <select name="rating" id="review-rating" class="border border-gray-300 rounded-lg px-3 py-2 w-full md:w-32 focus:ring-bb-blue focus:border-bb-blue outline-none" required>
+                                <option value="5">5 Sao (Rất tốt)</option>
+                                <option value="4">4 Sao (Tốt)</option>
+                                <option value="3">3 Sao (Bình thường)</option>
+                                <option value="2">2 Sao (Tệ)</option>
+                                <option value="1">1 Sao (Rất tệ)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Nhận xét (không bắt buộc):</label>
+                            <textarea name="comment" id="review-comment" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-bb-blue focus:border-bb-blue outline-none" placeholder="Chia sẻ cảm nhận của bạn về sản phẩm..."></textarea>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Hình ảnh đính kèm (Tối đa 3 ảnh):</label>
+                            <input type="file" name="review_images[]" id="review-images" multiple accept="image/jpeg, image/png, image/webp" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-bb-blue hover:file:bg-blue-100">
+                        </div>
+                        <button type="submit" id="submit-review-btn" class="bg-bb-blue text-white font-semibold py-2 px-6 rounded-lg hover:bg-bb-dark transition-colors flex items-center gap-2">
+                            Gửi đánh giá
+                        </button>
+                    </form>
+                </div>
+                <?php endif; ?>
+
+                <div class="space-y-6" id="reviews-list">
+                    <?php if (empty($reviews)): ?>
+                        <p class="text-gray-500 italic">Chưa có đánh giá nào cho sản phẩm này.</p>
+                    <?php else: ?>
+                        <?php foreach ($reviews as $rv): ?>
+                            <div class="border-b border-gray-100 pb-6 last:border-0 last:pb-0">
+                                <div class="flex items-center gap-3 mb-2">
+                                    <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-bb-blue font-bold uppercase">
+                                        <?= mb_substr(htmlspecialchars($rv['user_name']), 0, 1) ?>
+                                    </div>
+                                    <div>
+                                        <p class="font-bold text-gray-800 text-sm"><?= htmlspecialchars($rv['user_name']) ?></p>
+                                        <div class="flex items-center gap-2">
+                                            <?= renderStars((float) $rv['rating']) ?>
+                                            <span class="text-xs text-gray-400"><?= date('d/m/Y H:i', strtotime($rv['created_at'])) ?></span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <?php if (!empty($rv['comment'])): ?>
+                                    <p class="text-gray-600 text-sm mt-2"><?= nl2br(htmlspecialchars($rv['comment'])) ?></p>
+                                <?php endif; ?>
+                                
+                                <?php if (!empty($rv['images_json'])): 
+                                    $images = json_decode($rv['images_json'], true);
+                                    if (is_array($images) && count($images) > 0):
+                                ?>
+                                    <div class="flex gap-2 mt-3 flex-wrap">
+                                        <?php foreach ($images as $img): ?>
+                                            <img src="/<?= htmlspecialchars($img) ?>" class="w-20 h-20 object-cover rounded-lg border border-gray-200 cursor-zoom-in" onclick="window.open(this.src, '_blank')" alt="Review image">
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endif; endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </section>
+
         <!-- ═══ RELATED PRODUCTS ═══ -->
         <?php if (!empty($relatedProducts)): ?>
         <section class="mb-12">
@@ -338,61 +480,199 @@ $image = getProductImage($product['image'] ?? '');
         this.value = Math.max(min, Math.min(max, val));
     });
 
-    /**
-     * Thêm vào giỏ với số lượng tùy chọn (từ trang chi tiết)
-     */
-    async function addToCartDetail(productId) {
-        const qty = parseInt(document.getElementById('product-qty')?.value) || 1;
-        const btn = document.getElementById('add-to-cart-btn');
-        if (!btn) return;
+    const variants = <?= json_encode($variants) ?>;
+    let selectedVariant = variants.length > 0 ? variants[0] : null;
+    let selectedAttributes = {};
 
+    function updateVariantUI() {
+        if (!selectedVariant) {
+            document.getElementById('add-to-cart-section')?.classList.add('hidden');
+            document.getElementById('buy-now-btn')?.classList.add('hidden');
+            document.getElementById('stock-status').innerHTML = '<span class="text-red-500 font-medium">Không khả dụng</span>';
+            return;
+        }
+
+        // Update price
+        const price = parseFloat(selectedVariant.price);
+        const salePrice = selectedVariant.sale_price ? parseFloat(selectedVariant.sale_price) : null;
+        const displayPrice = salePrice || price;
+
+        const displayPriceEl = document.getElementById('display-price');
+        if(displayPriceEl) displayPriceEl.textContent = new Intl.NumberFormat('vi-VN').format(displayPrice) + ' VNĐ';
+        
+        const origPriceEl = document.getElementById('original-price');
+        if(origPriceEl) {
+            if (salePrice) {
+                origPriceEl.textContent = new Intl.NumberFormat('vi-VN').format(price) + ' VNĐ';
+                origPriceEl.classList.remove('hidden');
+            } else {
+                origPriceEl.classList.add('hidden');
+            }
+        }
+
+        // Update stock
+        const stock = parseInt(selectedVariant.stock);
+        const stockStatus = document.getElementById('stock-status');
+        const addToCartSection = document.getElementById('add-to-cart-section');
+        const buyNowBtn = document.getElementById('buy-now-btn');
+        const qtyInput = document.getElementById('product-qty');
+
+        if (stock > 10) {
+            if(stockStatus) stockStatus.innerHTML = '<span class="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse"></span><span class="text-sm font-medium text-green-600">Còn hàng</span>';
+            addToCartSection?.classList.remove('hidden');
+            buyNowBtn?.classList.remove('hidden');
+            if(qtyInput) qtyInput.max = stock;
+        } else if (stock > 0) {
+            if(stockStatus) stockStatus.innerHTML = '<span class="w-2.5 h-2.5 bg-orange-500 rounded-full animate-pulse"></span><span class="text-sm font-medium text-orange-600">Chỉ còn ' + stock + ' sản phẩm</span>';
+            addToCartSection?.classList.remove('hidden');
+            buyNowBtn?.classList.remove('hidden');
+            if(qtyInput) qtyInput.max = stock;
+        } else {
+            if(stockStatus) stockStatus.innerHTML = '<span class="w-2.5 h-2.5 bg-red-500 rounded-full"></span><span class="text-sm font-medium text-red-600">Hết hàng</span>';
+            addToCartSection?.classList.add('hidden');
+            buyNowBtn?.classList.add('hidden');
+        }
+
+        // Update image
+        if (selectedVariant.image_url) {
+            const img = document.getElementById('product-main-image');
+            if(img) img.src = '/' + selectedVariant.image_url;
+        }
+    }
+
+    // Bind click events on attribute buttons
+    document.querySelectorAll('.attribute-group').forEach(group => {
+        const attrId = group.getAttribute('data-attr-id');
+        const buttons = group.querySelectorAll('.variant-btn');
+        
+        buttons.forEach(btn => {
+            btn.addEventListener('click', function() {
+                // Remove active state from all siblings
+                buttons.forEach(b => {
+                    b.classList.remove('border-bb-blue', 'text-bb-blue', 'bg-blue-50');
+                    b.classList.add('border-gray-200');
+                });
+                // Add active state to clicked
+                this.classList.remove('border-gray-200');
+                this.classList.add('border-bb-blue', 'text-bb-blue', 'bg-blue-50');
+
+                selectedAttributes[attrId] = this.getAttribute('data-val-id');
+                findVariant();
+            });
+        });
+    });
+
+    function findVariant() {
+        // Build a sorted array of selected value IDs
+        const selectedValues = Object.values(selectedAttributes).map(v => parseInt(v)).sort((a,b) => a-b).join(',');
+        const matched = variants.find(v => v.attribute_value_ids === selectedValues);
+        if (matched) {
+            selectedVariant = matched;
+            updateVariantUI();
+        } else {
+            selectedVariant = null;
+            updateVariantUI();
+        }
+    }
+
+    // Auto-select first variant on load if attributes exist
+    if (variants.length > 0 && variants[0].attribute_value_ids) {
+        const defaultValues = variants[0].attribute_value_ids.split(',');
+        document.querySelectorAll('.attribute-group').forEach(group => {
+            const attrId = group.getAttribute('data-attr-id');
+            const buttons = group.querySelectorAll('.variant-btn');
+            buttons.forEach(btn => {
+                if (defaultValues.includes(btn.getAttribute('data-val-id'))) {
+                    btn.click(); // Triggers event listener
+                }
+            });
+        });
+    } else {
+        updateVariantUI();
+    }
+
+    /**
+     * Thêm vào giỏ
+     */
+    async function addToCartVariant(redirect = false) {
+        if (!selectedVariant) {
+            showToast('Vui lòng chọn phân loại hàng', 'error');
+            return;
+        }
+
+        const qty = parseInt(document.getElementById('product-qty')?.value) || 1;
+        const btn = redirect ? document.getElementById('buy-now-btn') : document.getElementById('add-to-cart-btn');
+        
         const originalHtml = btn.innerHTML;
         btn.disabled = true;
-        btn.innerHTML = `
-            <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-            </svg>
-            Đang thêm...`;
-
+        btn.innerHTML = 'Đang xử lý...';
+        
         try {
             const resp = await fetch('/cart_api.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'add', product_id: productId, quantity: qty })
+                body: JSON.stringify({ action: 'add', variant_id: selectedVariant.id, quantity: qty })
             });
             const data = await resp.json();
-
             if (data.success) {
-                updateCartBadge(data.cartCount);
-                btn.innerHTML = `
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                    </svg>
-                    Đã thêm thành công!`;
-                btn.classList.remove('bg-bb-yellow', 'hover:bg-yellow-300', 'shadow-yellow-500/20');
-                btn.classList.add('bg-green-500', 'text-white', 'shadow-green-500/20');
-                if (typeof openCartDrawer === 'function') {
-                    openCartDrawer();
-                } else {
-                    showToast('✓ Đã thêm ' + qty + ' sản phẩm vào giỏ hàng!', 'success');
+                if (redirect) {
+                    window.location.href = '/checkout.php';
+                    return;
                 }
-
-                setTimeout(() => {
-                    btn.innerHTML = originalHtml;
-                    btn.disabled = false;
-                    btn.classList.remove('bg-green-500', 'text-white', 'shadow-green-500/20');
-                    btn.classList.add('bg-bb-yellow', 'hover:bg-yellow-300', 'shadow-yellow-500/20');
-                }, 2000);
+                updateCartBadge(data.cartCount);
+                if (typeof openCartDrawer === 'function') openCartDrawer();
+                else showToast('✓ Đã thêm vào giỏ hàng!', 'success');
             } else {
-                throw new Error(data.message || 'Lỗi');
+                throw new Error(data.message || 'Lỗi thêm sản phẩm');
             }
         } catch (err) {
             showToast('✕ ' + err.message, 'error');
-            btn.innerHTML = originalHtml;
+        } finally {
+            if (!redirect) {
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            }
+        }
+    }
+
+    function buyNowVariant() {
+        addToCartVariant(true);
+    }
+
+    /**
+     * Gửi đánh giá sản phẩm
+     */
+    async function submitReview(e, productId) {
+        e.preventDefault();
+        const form = e.target;
+        const btn = document.getElementById('submit-review-btn');
+        const formData = new FormData(form);
+        formData.append('product_id', productId);
+
+        const originalBtnHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = 'Đang gửi...';
+
+        try {
+            const resp = await fetch('/api/submit_review.php', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await resp.json();
+
+            if (resp.ok && data.success) {
+                alert(data.message);
+                window.location.reload(); // Tải lại trang để thấy đánh giá mới và rating mới
+            } else {
+                throw new Error(data.error || 'Đã có lỗi xảy ra.');
+            }
+        } catch (err) {
+            alert('Lỗi: ' + err.message);
+            btn.innerHTML = originalBtnHtml;
             btn.disabled = false;
         }
     }
     </script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
+
