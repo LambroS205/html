@@ -164,6 +164,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $action = 'list';
     }
+
+    // ── CREATE VARIANT ──
+    elseif ($action === 'create_variant') {
+        $productId = (int) ($_POST['product_id'] ?? 0);
+        $sku = trim($_POST['sku'] ?? '');
+        $price = (float) ($_POST['price'] ?? 0);
+        $salePrice = !empty($_POST['sale_price']) ? (float) $_POST['sale_price'] : null;
+        $stock = (int) ($_POST['stock'] ?? 0);
+        $image = trim($_POST['image'] ?? '');
+        $attrValues = $_POST['attributes'] ?? [];
+
+        if ($productId > 0 && !empty($sku) && $price > 0) {
+            try {
+                $pdo->beginTransaction();
+                $stmt = $pdo->prepare("INSERT INTO product_variants (product_id, sku, price, sale_price, stock, image_url) VALUES (:pid, :sku, :price, :sale, :stock, :img)");
+                $stmt->execute([':pid' => $productId, ':sku' => $sku, ':price' => $price, ':sale' => $salePrice, ':stock' => $stock, ':img' => $image]);
+                $variantId = $pdo->lastInsertId();
+
+                if (!empty($attrValues)) {
+                    $insertAttr = $pdo->prepare("INSERT INTO variant_attribute_values (variant_id, attribute_value_id) VALUES (:vid, :aid)");
+                    foreach ($attrValues as $valId) {
+                        if ((int)$valId > 0) {
+                            $insertAttr->execute([':vid' => $variantId, ':aid' => (int)$valId]);
+                        }
+                    }
+                }
+                $pdo->commit();
+                $message = '✅ Thêm biến thể thành công!';
+                $msgType = 'success';
+            } catch (Exception $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                $message = '❌ Lỗi thêm biến thể: ' . htmlspecialchars($e->getMessage());
+                $msgType = 'error';
+            }
+        } else {
+            $message = '❌ Vui lòng điền đủ SKU và Giá.';
+            $msgType = 'error';
+        }
+        $action = 'variants';
+        $_GET['id'] = $productId;
+    }
+
+    // ── DELETE VARIANT ──
+    elseif ($action === 'delete_variant') {
+        $variantId = (int) ($_POST['variant_id'] ?? 0);
+        $productId = (int) ($_POST['product_id'] ?? 0);
+        if ($variantId > 0) {
+            try {
+                $stmt = $pdo->prepare("DELETE FROM product_variants WHERE id = :id");
+                $stmt->execute([':id' => $variantId]);
+                $message = '✅ Xóa biến thể thành công!';
+                $msgType = 'success';
+            } catch (Exception $e) {
+                $message = '❌ Không thể xóa: ' . htmlspecialchars($e->getMessage());
+                $msgType = 'error';
+            }
+        }
+        $action = 'variants';
+        $_GET['id'] = $productId;
+    }
 }
 
 // ══════════════════════════════════════════
@@ -306,6 +366,157 @@ if ($action === 'add' || $action === 'edit'):
         </form>
     </div>
 
+<?php elseif ($action === 'variants'): 
+    $id = (int) ($_GET['id'] ?? 0);
+    $product = $pdo->query("SELECT * FROM products WHERE id = $id")->fetch();
+    if (!$product) { echo '<p class="text-red-400">Sản phẩm không tồn tại</p>'; require_once __DIR__ . '/includes/admin_footer.php'; exit; }
+    
+    // Fetch variants
+    $variants = $pdo->query("
+        SELECT pv.*, GROUP_CONCAT(av.value SEPARATOR ' - ') as attrs 
+        FROM product_variants pv 
+        LEFT JOIN variant_attribute_values vav ON pv.id = vav.variant_id
+        LEFT JOIN attribute_values av ON vav.attribute_value_id = av.id
+        WHERE pv.product_id = $id
+        GROUP BY pv.id
+    ")->fetchAll();
+
+    // Fetch all attributes and values for the add form
+    $allAttrs = $pdo->query("
+        SELECT a.id as attr_id, a.name as attr_name, av.id as val_id, av.value as val_name
+        FROM attributes a
+        JOIN attribute_values av ON a.id = av.attribute_id
+        ORDER BY a.id, av.id
+    ")->fetchAll();
+    
+    $groupedAttrs = [];
+    foreach ($allAttrs as $row) {
+        $groupedAttrs[$row['attr_id']]['name'] = $row['attr_name'];
+        $groupedAttrs[$row['attr_id']]['values'][] = ['id' => $row['val_id'], 'val' => $row['val_name']];
+    }
+?>
+    <div class="max-w-6xl">
+        <div class="flex items-center gap-3 mb-6">
+            <a href="/admin/products.php" class="text-gray-400 hover:text-white transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            </a>
+            <h2 class="text-xl font-bold text-white">Quản lý Biến thể: <?= htmlspecialchars($product['name']) ?></h2>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Form Thêm Biến thể -->
+            <div class="lg:col-span-1">
+                <div class="bg-admin-card rounded-2xl border border-admin-border p-5 sticky top-24">
+                    <h3 class="text-lg font-bold text-white mb-4">Thêm Biến thể mới</h3>
+                    <form method="POST" action="/admin/products.php" class="space-y-4">
+                        <?= csrfField() ?>
+                        <input type="hidden" name="action" value="create_variant">
+                        <input type="hidden" name="product_id" value="<?= $product['id'] ?>">
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-400 mb-1.5">SKU <span class="text-red-400">*</span></label>
+                            <input type="text" name="sku" required class="w-full px-4 py-3 bg-admin-bg border border-admin-border rounded-xl text-white text-sm focus:border-bb-yellow outline-none transition-colors" placeholder="VD: IPHONE16-DEN-256">
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-400 mb-1.5">Giá <span class="text-red-400">*</span></label>
+                                <input type="number" name="price" step="0.01" min="0" required class="w-full px-4 py-3 bg-admin-bg border border-admin-border rounded-xl text-white text-sm focus:border-bb-yellow outline-none transition-colors">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-400 mb-1.5">Giá KM</label>
+                                <input type="number" name="sale_price" step="0.01" min="0" class="w-full px-4 py-3 bg-admin-bg border border-admin-border rounded-xl text-white text-sm focus:border-bb-yellow outline-none transition-colors">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-400 mb-1.5">Kho</label>
+                                <input type="number" name="stock" min="0" value="10" class="w-full px-4 py-3 bg-admin-bg border border-admin-border rounded-xl text-white text-sm focus:border-bb-yellow outline-none transition-colors">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-400 mb-1.5">Ảnh (Đường dẫn)</label>
+                                <input type="text" name="image" class="w-full px-4 py-3 bg-admin-bg border border-admin-border rounded-xl text-white text-sm focus:border-bb-yellow outline-none transition-colors">
+                            </div>
+                        </div>
+
+                        <!-- Lựa chọn Thuộc tính -->
+                        <div class="border-t border-admin-border pt-4 mt-4">
+                            <h4 class="text-sm font-bold text-gray-300 mb-3">Chọn thuộc tính (Tùy chọn):</h4>
+                            <?php foreach ($groupedAttrs as $attrId => $attr): ?>
+                                <div class="mb-3">
+                                    <label class="block text-xs font-medium text-gray-400 mb-1"><?= htmlspecialchars($attr['name']) ?></label>
+                                    <select name="attributes[]" class="w-full px-3 py-2 bg-admin-bg border border-admin-border rounded-lg text-white text-sm focus:border-bb-yellow outline-none transition-colors">
+                                        <option value="">-- Không chọn --</option>
+                                        <?php foreach ($attr['values'] as $val): ?>
+                                            <option value="<?= $val['id'] ?>"><?= htmlspecialchars($val['val']) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+
+                        <button type="submit" class="w-full bg-bb-yellow text-bb-dark font-bold px-4 py-3 rounded-xl hover:bg-yellow-300 transition-all active:scale-[0.98] mt-4">
+                            ➕ Thêm Biến thể
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Danh sách Biến thể -->
+            <div class="lg:col-span-2">
+                <div class="bg-admin-card rounded-2xl border border-admin-border overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-admin-border text-left text-xs text-gray-500 uppercase tracking-wider bg-admin-bg/50">
+                                    <th class="px-5 py-3">SKU</th>
+                                    <th class="px-5 py-3">Thuộc tính</th>
+                                    <th class="px-5 py-3 text-right">Giá</th>
+                                    <th class="px-5 py-3 text-center">Kho</th>
+                                    <th class="px-5 py-3 text-right">Hành động</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-admin-border">
+                                <?php if (empty($variants)): ?>
+                                    <tr><td colspan="5" class="px-5 py-8 text-center text-gray-500 italic">Chưa có biến thể nào. Sản phẩm sẽ không thể mua được.</td></tr>
+                                <?php endif; ?>
+                                <?php foreach ($variants as $v): ?>
+                                <tr class="hover:bg-admin-bg/40">
+                                    <td class="px-5 py-3 text-white font-mono text-xs"><?= htmlspecialchars($v['sku']) ?></td>
+                                    <td class="px-5 py-3 text-gray-400"><?= $v['attrs'] ?: '<i class="text-xs">Mặc định</i>' ?></td>
+                                    <td class="px-5 py-3 text-right">
+                                        <?php if ($v['sale_price']): ?>
+                                            <span class="text-bb-yellow"><?= formatPrice((float)$v['sale_price']) ?></span><br>
+                                            <span class="text-xs text-gray-500 line-through"><?= formatPrice((float)$v['price']) ?></span>
+                                        <?php else: ?>
+                                            <span class="text-white"><?= formatPrice((float)$v['price']) ?></span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="px-5 py-3 text-center">
+                                        <span class="<?= $v['stock'] > 0 ? 'text-green-400' : 'text-red-400' ?> font-medium"><?= $v['stock'] ?></span>
+                                    </td>
+                                    <td class="px-5 py-3 text-right">
+                                        <form method="POST" action="/admin/products.php" class="inline" onsubmit="return confirmDelete('Xóa biến thể <?= htmlspecialchars(addslashes($v['sku'])) ?>?')">
+                                            <?= csrfField() ?>
+                                            <input type="hidden" name="action" value="delete_variant">
+                                            <input type="hidden" name="product_id" value="<?= $product['id'] ?>">
+                                            <input type="hidden" name="variant_id" value="<?= $v['id'] ?>">
+                                            <button type="submit" class="p-1.5 rounded-lg text-red-400 hover:bg-red-500/20 transition-colors" title="Xóa">
+                                                Xóa
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 <?php else:
 // ── LIST — Danh sách sản phẩm ──
     $products = $pdo->query("
@@ -386,6 +597,10 @@ if ($action === 'add' || $action === 'edit'):
                                 <a href="/<?= htmlspecialchars($p['slug']) ?>.html" target="_blank"
                                    class="p-2 rounded-lg hover:bg-admin-bg text-gray-400 hover:text-blue-400 transition-colors" title="Xem">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                                </a>
+                                <a href="/admin/products.php?action=variants&id=<?= $p['id'] ?>"
+                                   class="p-2 rounded-lg hover:bg-admin-bg text-gray-400 hover:text-purple-400 transition-colors" title="Quản lý biến thể">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
                                 </a>
                                 <a href="/admin/products.php?action=edit&id=<?= $p['id'] ?>"
                                    class="p-2 rounded-lg hover:bg-admin-bg text-gray-400 hover:text-yellow-400 transition-colors" title="Sửa">
