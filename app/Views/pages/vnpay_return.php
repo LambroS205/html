@@ -6,9 +6,9 @@ if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.cookie_httponly', 1); session_start();
 }
 
-require_once __DIR__ . '/config/db.php';
-require_once __DIR__ . '/config/vnpay.php';
-require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../config/vnpay.php';
+require_once __DIR__ . '/../../../includes/helpers.php';
 
 $vnp_SecureHash = $_GET['vnp_SecureHash'] ?? '';
 $inputData = array();
@@ -77,7 +77,7 @@ if ($isValidSignature) {
 }
 
 $pageTitle = 'Kết quả thanh toán — BestBuy Store';
-require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/../../../includes/header.php';
 ?>
 
 <div class="bg-gray-50/50 py-20 min-h-screen flex items-center justify-center">
@@ -136,4 +136,4 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 </div>
 
-<?php require_once __DIR__ . '/includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../../../includes/footer.php'; ?>

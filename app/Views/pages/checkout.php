@@ -17,8 +17,8 @@ if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.cookie_httponly', 1); session_start();
 }
 
-require_once __DIR__ . '/config/db.php';
-require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../includes/helpers.php';
 
 $pdo = Database::getConnection();
 
@@ -210,7 +210,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // 5. Nếu là VNPay -> Chuyển hướng sang VNPay
             if ($formData['payment_method'] === 'vnpay') {
-                require_once __DIR__ . '/config/vnpay.php';
+                require_once __DIR__ . '/../../../config/vnpay.php';
                 
                 $vnp_TxnRef = $orderCode;
                 $vnp_OrderInfo = "Thanh toan don hang " . $orderCode;
@@ -303,7 +303,7 @@ $total = $amountBeforeVat + $shippingFee + $vat;
 $pageTitle = $orderSuccess ? 'Đặt hàng thành công — BestBuy' : 'Thanh toán — BestBuy Store';
 $pageDescription = 'Hoàn tất đơn hàng tại BestBuy Store.';
 
-require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/../../../includes/header.php';
 ?>
 
     <div class="max-w-7xl mx-auto px-4 py-6">
@@ -390,7 +390,7 @@ require_once __DIR__ . '/includes/header.php';
                             ← Tiếp tục mua sắm
                         </a>
                         <?php if (!empty($_SESSION['user'])): ?>
-                        <a href="/profile.php" class="flex-1 text-center border-2 border-gray-200 text-gray-600 font-semibold py-3.5 rounded-xl hover:bg-gray-50 transition-all">
+                        <a href="/profile" class="flex-1 text-center border-2 border-gray-200 text-gray-600 font-semibold py-3.5 rounded-xl hover:bg-gray-50 transition-all">
                             📋 Xem đơn hàng của tôi
                         </a>
                         <?php else: ?>
@@ -439,7 +439,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
         <?php endif; ?>
 
-        <form method="POST" action="/checkout.php" id="checkout-form" novalidate>
+        <form method="POST" action="/checkout" id="checkout-form" novalidate>
             <?= csrfField() ?>
             <div class="flex flex-col lg:flex-row gap-8">
 
@@ -895,5 +895,5 @@ require_once __DIR__ . '/includes/header.php';
     </script>
 
 
-<?php require_once __DIR__ . '/includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../../../includes/footer.php'; ?>
 

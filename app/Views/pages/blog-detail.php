@@ -6,14 +6,14 @@ if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.cookie_httponly', 1); session_start();
 }
 
-require_once __DIR__ . '/config/db.php';
-require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../includes/helpers.php';
 
 $pdo = Database::getConnection();
 
 $slug = $_GET['slug'] ?? '';
 if (empty($slug)) {
-    header('Location: /blog.php');
+    header('Location: /blog');
     exit;
 }
 
@@ -31,12 +31,12 @@ $post = $stmt->fetch();
 if (!$post) {
     http_response_code(404);
     $pageTitle = 'Không tìm thấy bài viết';
-    require_once __DIR__ . '/includes/header.php';
+    require_once __DIR__ . '/../../../includes/header.php';
     echo '<div class="max-w-3xl mx-auto px-4 py-20 text-center">
             <h1 class="text-3xl font-bold text-gray-800 mb-4">Bài viết không tồn tại</h1>
-            <a href="/blog.php" class="text-bb-blue hover:underline">← Trở về trang Blog</a>
+            <a href="/blog" class="text-bb-blue hover:underline">← Trở về trang Blog</a>
           </div>';
-    require_once __DIR__ . '/includes/footer.php';
+    require_once __DIR__ . '/../../../includes/footer.php';
     exit;
 }
 
@@ -56,7 +56,7 @@ $relatedPosts = $stmtRelated->fetchAll();
 
 $pageTitle = htmlspecialchars($post['title']) . ' — Blog Công Nghệ';
 $pageDescription = htmlspecialchars($post['excerpt']);
-require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/../../../includes/header.php';
 ?>
 
 <div class="bg-bb-light py-10 min-h-screen">
@@ -74,9 +74,9 @@ require_once __DIR__ . '/includes/header.php';
         <nav class="flex items-center gap-2 text-sm text-gray-500 mb-6 flex-wrap">
             <a href="/" class="hover:text-bb-blue transition-colors">Trang chủ</a>
             <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-            <a href="/blog.php" class="hover:text-bb-blue transition-colors">Blog</a>
+            <a href="/blog" class="hover:text-bb-blue transition-colors">Blog</a>
             <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-            <a href="/blog.php?category=<?= htmlspecialchars($post['category_slug']) ?>" class="text-bb-blue hover:underline"><?= htmlspecialchars($post['category_name']) ?></a>
+            <a href="/blog?category=<?= htmlspecialchars($post['category_slug']) ?>" class="text-bb-blue hover:underline"><?= htmlspecialchars($post['category_name']) ?></a>
         </nav>
 
         <h1 class="text-3xl md:text-5xl font-extrabold text-gray-900 leading-tight mb-6">
@@ -141,7 +141,7 @@ require_once __DIR__ . '/includes/header.php';
                 </h3>
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
                     <?php foreach ($relatedPosts as $rp): ?>
-                        <a href="/blog-detail.php?slug=<?= htmlspecialchars($rp['slug']) ?>" class="group">
+                        <a href="/blog-detail?slug=<?= htmlspecialchars($rp['slug']) ?>" class="group">
                             <div class="aspect-video bg-gray-100 rounded-xl overflow-hidden mb-3 relative">
                                 <?php if ($rp['cover_image']): ?>
                                     <img src="<?= htmlspecialchars($rp['cover_image']) ?>" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
@@ -162,4 +162,4 @@ require_once __DIR__ . '/includes/header.php';
     </main>
 </div>
 
-<?php require_once __DIR__ . '/includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../../../includes/footer.php'; ?>

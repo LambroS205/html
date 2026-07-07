@@ -20,8 +20,8 @@ if (empty($_SESSION['user'])) {
     exit;
 }
 
-require_once __DIR__ . '/config/db.php';
-require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../includes/helpers.php';
 
 $pdo = Database::getConnection();
 $userId = (int) $_SESSION['user']['id'];
@@ -87,7 +87,7 @@ $statusLabels = [
 $pageTitle = 'Hồ sơ của tôi — BestBuy Store';
 $pageDescription = 'Xem thông tin tài khoản và lịch sử đơn hàng của bạn.';
 
-require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/../../../includes/header.php';
 ?>
 
     <div class="max-w-5xl mx-auto px-4 py-8">
@@ -262,5 +262,5 @@ require_once __DIR__ . '/includes/header.php';
         </div>
     </div>
 
-<?php require_once __DIR__ . '/includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../../../includes/footer.php'; ?>
 

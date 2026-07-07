@@ -14,8 +14,8 @@ if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.cookie_httponly', 1); session_start();
 }
 
-require_once __DIR__ . '/config/db.php';
-require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../includes/helpers.php';
 
 $pdo = Database::getConnection();
 
@@ -114,7 +114,7 @@ $allCategories = $pdo->query("
     ORDER BY c.id
 ")->fetchAll();
 
-require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/../../../includes/header.php';
 ?>
 
     <!-- ═══ SEARCH RESULTS PAGE ═══ -->
@@ -149,7 +149,7 @@ require_once __DIR__ . '/includes/header.php';
                     <div class="mb-5">
                         <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-3">Danh mục</p>
                         <div class="space-y-1">
-                            <a href="/search.php<?= $searchQuery ? '?q=' . urlencode($searchQuery) : '' ?>" 
+                            <a href="/search<?= $searchQuery ? '?q=' . urlencode($searchQuery) : '' ?>" 
                                class="flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all <?= $categorySlug === '' ? 'bg-bb-blue/10 text-bb-blue font-semibold' : 'text-gray-600 hover:bg-gray-50' ?>">
                                 <span>Tất cả</span>
                             </a>
@@ -173,7 +173,7 @@ require_once __DIR__ . '/includes/header.php';
                     <!-- Deal filter -->
                     <div class="mb-5">
                         <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-3">Khuyến mãi</p>
-                        <a href="/search.php?deals=1<?= $categorySlug ? '&category=' . urlencode($categorySlug) : '' ?>" 
+                        <a href="/search?deals=1<?= $categorySlug ? '&category=' . urlencode($categorySlug) : '' ?>" 
                            class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all <?= $dealsOnly ? 'bg-red-50 text-red-600 font-semibold' : 'text-gray-600 hover:bg-gray-50' ?>">
                             🔥 Chỉ hiện deal giảm giá
                         </a>
@@ -252,5 +252,5 @@ require_once __DIR__ . '/includes/header.php';
     }
     </script>
 
-<?php require_once __DIR__ . '/includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../../../includes/footer.php'; ?>
 

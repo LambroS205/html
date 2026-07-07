@@ -11,8 +11,8 @@ if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.cookie_httponly', 1); session_start();
 }
 
-require_once __DIR__ . '/config/db.php';
-require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../includes/helpers.php';
 
 $pdo = Database::getConnection();
 
@@ -39,14 +39,14 @@ $product = $stmt->fetch();
 if (!$product) {
     http_response_code(404);
     $pageTitle = 'Không tìm thấy sản phẩm — BestBuy';
-    require_once __DIR__ . '/includes/header.php';
+    require_once __DIR__ . '/../../../includes/header.php';
     echo '<div class="max-w-7xl mx-auto px-4 py-20 text-center">
             <span class="text-6xl mb-4 block">😕</span>
             <h1 class="text-2xl font-bold text-gray-800 mb-2">Không tìm thấy sản phẩm</h1>
             <p class="text-gray-400 mb-6">Sản phẩm bạn tìm kiếm không tồn tại hoặc đã bị xóa.</p>
             <a href="/" class="inline-flex items-center gap-2 bg-bb-blue text-white font-semibold px-6 py-3 rounded-full hover:bg-bb-dark transition-colors">← Về trang chủ</a>
           </div>';
-    require_once __DIR__ . '/includes/footer.php';
+    require_once __DIR__ . '/../../../includes/footer.php';
     exit;
 }
 
@@ -168,7 +168,7 @@ $specLabels = [
     'codec' => 'Codec', 'connectivity' => 'Kết nối', 'features' => 'Tính năng',
 ];
 
-require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/../../../includes/header.php';
 
 $image = getProductImage($product['image'] ?? '');
 ?>
@@ -755,5 +755,5 @@ $image = getProductImage($product['image'] ?? '');
     }
     </script>
 
-<?php require_once __DIR__ . '/includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../../../includes/footer.php'; ?>
 

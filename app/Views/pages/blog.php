@@ -6,8 +6,8 @@ if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.cookie_httponly', 1); session_start();
 }
 
-require_once __DIR__ . '/config/db.php';
-require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../includes/helpers.php';
 
 $pdo = Database::getConnection();
 
@@ -61,7 +61,7 @@ $stmtPosts->execute($params);
 $posts = $stmtPosts->fetchAll();
 
 $pageTitle = $categoryName . ' — Blog Công Nghệ';
-require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/../../../includes/header.php';
 ?>
 
 <div class="bg-bb-light py-10 min-h-screen">
@@ -81,13 +81,13 @@ require_once __DIR__ . '/includes/header.php';
                     <h3 class="font-bold text-gray-900 mb-4 text-lg">Chủ đề</h3>
                     <ul class="space-y-2">
                         <li>
-                            <a href="/blog.php" class="flex items-center justify-between py-2 text-sm <?= empty($catSlug) ? 'text-bb-blue font-semibold' : 'text-gray-600 hover:text-bb-blue transition-colors' ?>">
+                            <a href="/blog" class="flex items-center justify-between py-2 text-sm <?= empty($catSlug) ? 'text-bb-blue font-semibold' : 'text-gray-600 hover:text-bb-blue transition-colors' ?>">
                                 <span>Tất cả</span>
                             </a>
                         </li>
                         <?php foreach ($categories as $c): ?>
                             <li>
-                                <a href="/blog.php?category=<?= htmlspecialchars($c['slug']) ?>" class="flex items-center justify-between py-2 text-sm <?= $catSlug === $c['slug'] ? 'text-bb-blue font-semibold' : 'text-gray-600 hover:text-bb-blue transition-colors' ?>">
+                                <a href="/blog?category=<?= htmlspecialchars($c['slug']) ?>" class="flex items-center justify-between py-2 text-sm <?= $catSlug === $c['slug'] ? 'text-bb-blue font-semibold' : 'text-gray-600 hover:text-bb-blue transition-colors' ?>">
                                     <span><?= htmlspecialchars($c['name']) ?></span>
                                 </a>
                             </li>
@@ -108,13 +108,13 @@ require_once __DIR__ . '/includes/header.php';
                         <span class="text-6xl mb-4 block opacity-50">📰</span>
                         <h2 class="text-xl font-bold text-gray-800 mb-2">Chưa có bài viết nào</h2>
                         <p class="text-gray-500 mb-6">Hiện tại chuyên mục này chưa có bài viết mới. Vui lòng quay lại sau.</p>
-                        <a href="/blog.php" class="text-bb-blue font-medium hover:underline">Xem tất cả bài viết</a>
+                        <a href="/blog" class="text-bb-blue font-medium hover:underline">Xem tất cả bài viết</a>
                     </div>
                 <?php else: ?>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         <?php foreach ($posts as $post): ?>
                             <article class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl transition-all duration-300 group flex flex-col">
-                                <a href="/blog-detail.php?slug=<?= htmlspecialchars($post['slug']) ?>" class="relative block overflow-hidden aspect-[4/3] bg-gray-100">
+                                <a href="/blog-detail?slug=<?= htmlspecialchars($post['slug']) ?>" class="relative block overflow-hidden aspect-[4/3] bg-gray-100">
                                     <?php if ($post['cover_image']): ?>
                                         <img src="<?= htmlspecialchars($post['cover_image']) ?>" alt="<?= htmlspecialchars($post['title']) ?>" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
                                     <?php else: ?>
@@ -136,7 +136,7 @@ require_once __DIR__ . '/includes/header.php';
                                         </span>
                                     </div>
                                     <h3 class="font-bold text-gray-900 mb-2 line-clamp-2 group-hover:text-bb-blue transition-colors leading-snug">
-                                        <a href="/blog-detail.php?slug=<?= htmlspecialchars($post['slug']) ?>"><?= htmlspecialchars($post['title']) ?></a>
+                                        <a href="/blog-detail?slug=<?= htmlspecialchars($post['slug']) ?>"><?= htmlspecialchars($post['title']) ?></a>
                                     </h3>
                                     <p class="text-sm text-gray-500 line-clamp-3 mb-4 flex-1">
                                         <?= htmlspecialchars($post['excerpt']) ?>
@@ -156,7 +156,7 @@ require_once __DIR__ . '/includes/header.php';
                     <?php if ($totalPages > 1): ?>
                         <div class="mt-12 flex items-center justify-center gap-2">
                             <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-                                <a href="/blog.php?page=<?= $i ?><?= $catSlug ? '&category='.$catSlug : '' ?>" 
+                                <a href="/blog?page=<?= $i ?><?= $catSlug ? '&category='.$catSlug : '' ?>" 
                                    class="w-10 h-10 flex items-center justify-center rounded-xl font-medium transition-colors <?= $i === $page ? 'bg-bb-blue text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200' ?>">
                                     <?= $i ?>
                                 </a>
@@ -170,4 +170,4 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 </div>
 
-<?php require_once __DIR__ . '/includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../../../includes/footer.php'; ?>

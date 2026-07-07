@@ -153,7 +153,7 @@
                 <span id="drawer-total" class="text-2xl font-black text-bb-blue">0$</span>
             </div>
             
-            <a href="/checkout.php" id="drawer-checkout-btn" class="block w-full text-center bg-bb-yellow text-bb-dark font-bold py-3.5 rounded-xl hover:bg-yellow-300 active:scale-[0.98] transition-all shadow-lg shadow-yellow-500/20 text-base">
+            <a href="/checkout" id="drawer-checkout-btn" class="block w-full text-center bg-bb-yellow text-bb-dark font-bold py-3.5 rounded-xl hover:bg-yellow-300 active:scale-[0.98] transition-all shadow-lg shadow-yellow-500/20 text-base">
                 Thanh toán ngay →
             </a>
         </div>
