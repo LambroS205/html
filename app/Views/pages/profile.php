@@ -87,6 +87,10 @@ $statusLabels = [
 $pageTitle = 'Hồ sơ của tôi — BestBuy Store';
 $pageDescription = 'Xem thông tin tài khoản và lịch sử đơn hàng của bạn.';
 
+$profileError = $_SESSION['profile_error'] ?? null;
+$profileSuccess = $_SESSION['profile_success'] ?? null;
+unset($_SESSION['profile_error'], $_SESSION['profile_success']);
+
 require_once __DIR__ . '/../../../includes/header.php';
 ?>
 
@@ -103,9 +107,10 @@ require_once __DIR__ . '/../../../includes/header.php';
 
             <!-- ═══ LEFT: Profile Card ═══ -->
             <div class="lg:col-span-1">
-                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden sticky top-24">
-                    
-                    <!-- Avatar header -->
+                <div class="sticky top-24 space-y-6">
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                        
+                        <!-- Avatar header -->
                     <div class="bg-gradient-to-r from-bb-blue to-bb-dark p-6 text-center">
                         <div class="w-20 h-20 bg-white/15 rounded-full flex items-center justify-center mx-auto mb-3 backdrop-blur-sm text-3xl font-bold text-white border-2 border-white/20">
                             <?= strtoupper(mb_substr($user['name'], 0, 1)) ?>
@@ -151,6 +156,48 @@ require_once __DIR__ . '/../../../includes/header.php';
                             Đăng xuất
                         </a>
                     </div>
+                </div>
+
+                <!-- Đổi mật khẩu -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                    <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-bb-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                        Đổi mật khẩu
+                    </h3>
+                    
+                    <?php if ($profileError): ?>
+                        <div class="bg-red-50 text-red-600 text-xs p-3 rounded-lg mb-4 border border-red-100 flex items-center gap-2">
+                            <svg class="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>
+                            <?= htmlspecialchars($profileError) ?>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <?php if ($profileSuccess): ?>
+                        <div class="bg-green-50 text-green-600 text-xs p-3 rounded-lg mb-4 border border-green-100 flex items-center gap-2">
+                            <svg class="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
+                            <?= htmlspecialchars($profileSuccess) ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <form action="/profile/change-password" method="POST" class="space-y-3">
+                        <?= csrfField() ?>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Mật khẩu hiện tại</label>
+                            <input type="password" name="current_password" required class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-bb-blue/20 focus:border-bb-blue outline-none transition-all">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Mật khẩu mới</label>
+                            <input type="password" name="new_password" required minlength="6" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-bb-blue/20 focus:border-bb-blue outline-none transition-all">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Xác nhận mật khẩu mới</label>
+                            <input type="password" name="confirm_password" required minlength="6" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-bb-blue/20 focus:border-bb-blue outline-none transition-all">
+                        </div>
+                        <button type="submit" class="w-full bg-bb-blue text-white font-medium py-2 rounded-lg text-sm hover:bg-bb-dark transition-colors mt-1">
+                            Cập nhật mật khẩu
+                        </button>
+                    </form>
+                </div>
                 </div>
             </div>
 

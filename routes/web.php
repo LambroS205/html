@@ -33,6 +33,7 @@ Router::get('/wishlist.php', 'WishlistController@index');
 // Profile
 Router::get('/profile', 'ProfileController@index');
 Router::get('/profile.php', 'ProfileController@index');
+Router::post('/profile/change-password', 'ProfileController@changePassword');
 
 // Search (bao gồm cả chuẩn SEO)
 Router::get('/search', 'SearchController@index');
