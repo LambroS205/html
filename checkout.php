@@ -40,7 +40,8 @@ $orderTotal   = 0;
 // XỬ LÝ POST — Đặt hàng
 // ═══════════════════════════════════════
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
+    verifyCsrfToken();
+    
     // ── Thu thập dữ liệu form ──
     $formData = [
         'customer_name'  => trim($_POST['customer_name'] ?? ''),
@@ -49,6 +50,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'shipping_address' => trim($_POST['shipping_address'] ?? ''),
         'payment_method' => trim($_POST['payment_method'] ?? ''),
     ];
+} else {
+    // GET request: auto-fill từ session user nếu đã đăng nhập
+    if (!empty($_SESSION['user'])) {
+        $userInfo = $pdo->prepare("SELECT name, email, phone, address FROM users WHERE id = :id LIMIT 1");
+        $userInfo->execute([':id' => (int)$_SESSION['user']['id']]);
+        $userData = $userInfo->fetch();
+        if ($userData) {
+            $formData = [
+                'customer_name'  => $userData['name'] ?? '',
+                'customer_email' => $userData['email'] ?? '',
+                'customer_phone' => $userData['phone'] ?? '',
+                'shipping_address' => $userData['address'] ?? '',
+                'payment_method' => '',
+            ];
+        }
+    }
 
     // ══════════════════════════════════
     // SERVER-SIDE VALIDATION
@@ -105,39 +122,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $subtotal += (float) $item['price'] * (int) $item['quantity'];
             }
 
-            $freeShippingThreshold = 35.00;
-            $shippingFee = ($subtotal >= $freeShippingThreshold) ? 0 : 5.00;
-            $vat = round($subtotal * 0.10, 2);    // VAT 10%
-            $total = $subtotal + $shippingFee + $vat;
+            $freeShippingThreshold = 875000;
+            $shippingFee = ($subtotal >= $freeShippingThreshold || $subtotal == 0) ? 0 : 125000;
+            
+            // ── Tính giảm giá ──
+            $discount = 0;
+            $couponId = null;
+            if (isset($_SESSION['coupon'])) {
+                $coupon = $_SESSION['coupon'];
+                $couponId = $coupon['id'];
+                if ($coupon['type'] === 'percent') {
+                    $discount = $subtotal * ($coupon['value'] / 100);
+                } else {
+                    $discount = $coupon['value'];
+                }
+                if ($discount > $subtotal) {
+                    $discount = $subtotal;
+                }
+            }
+
+            $amountBeforeVat = max(0, $subtotal - $discount);
+            $vat = round($amountBeforeVat * 0.10, 2);    // VAT 10%
+            $total = $amountBeforeVat + $shippingFee + $vat;
 
             // ── Generate mã đơn hàng ──
             $orderCode = 'BB-' . strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 6));
 
             // ══════════════════════════════════
             // DATABASE TRANSACTION
-            // Lý do dùng Transaction:
-            //   Đảm bảo cả orders + order_items được insert đồng thời
-            //   Nếu bất kỳ query nào fail → rollback toàn bộ → dữ liệu nhất quán
             // ══════════════════════════════════
             $pdo->beginTransaction();
 
-            // 1. Insert vào bảng orders
+            // 1. Insert vào bảng orders (gắn user_id, coupon_id)
+            $currentUserId = $_SESSION['user']['id'] ?? null;
             $orderStmt = $pdo->prepare("
-                INSERT INTO orders (order_code, customer_name, customer_email, customer_phone, 
-                                    shipping_address, payment_method, subtotal, shipping_fee, tax, total, status)
-                VALUES (:order_code, :name, :email, :phone, :address, :payment, :subtotal, :shipping, :tax, :total, 'pending')
+                INSERT INTO orders (user_id, coupon_id, order_code, customer_name, customer_email, customer_phone, 
+                                    shipping_address, payment_method, subtotal, discount_amount, shipping_fee, tax, total, status)
+                VALUES (:user_id, :coupon_id, :order_code, :name, :email, :phone, :address, :payment, :subtotal, :discount_amount, :shipping, :tax, :total, 'pending')
             ");
             $orderStmt->execute([
-                ':order_code' => $orderCode,
-                ':name'       => $formData['customer_name'],
-                ':email'      => $formData['customer_email'],
-                ':phone'      => $formData['customer_phone'],
-                ':address'    => $formData['shipping_address'],
-                ':payment'    => $formData['payment_method'],
-                ':subtotal'   => $subtotal,
-                ':shipping'   => $shippingFee,
-                ':tax'        => $vat,
-                ':total'      => $total,
+                ':user_id'         => $currentUserId,
+                ':coupon_id'       => $couponId,
+                ':order_code'      => $orderCode,
+                ':name'            => $formData['customer_name'],
+                ':email'           => $formData['customer_email'],
+                ':phone'           => $formData['customer_phone'],
+                ':address'         => $formData['shipping_address'],
+                ':payment'         => $formData['payment_method'],
+                ':subtotal'        => $subtotal,
+                ':discount_amount' => $discount,
+                ':shipping'        => $shippingFee,
+                ':tax'             => $vat,
+                ':total'           => $total,
             ]);
 
             $orderId = (int) $pdo->lastInsertId();
@@ -161,8 +197,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // 3. COMMIT transaction
             $pdo->commit();
 
-            // 4. Clear cart session
+            // 4. Clear cart & coupon session
             $_SESSION['cart'] = [];
+            unset($_SESSION['coupon']);
 
             $orderSuccess = true;
             $orderTotal   = $total;
@@ -184,10 +221,27 @@ foreach ($cartItems as $item) {
     $subtotal += (float) $item['price'] * (int) $item['quantity'];
     $totalItems += (int) $item['quantity'];
 }
-$freeShippingThreshold = 35.00;
-$shippingFee = ($subtotal >= $freeShippingThreshold || $subtotal == 0) ? 0 : 5.00;
-$vat = round($subtotal * 0.10, 2);
-$total = $subtotal + $shippingFee + $vat;
+$freeShippingThreshold = 875000;
+$shippingFee = ($subtotal >= $freeShippingThreshold || $subtotal == 0) ? 0 : 125000;
+
+$discount = 0;
+$couponInfo = null;
+if (isset($_SESSION['coupon'])) {
+    $coupon = $_SESSION['coupon'];
+    if ($coupon['type'] === 'percent') {
+        $discount = $subtotal * ($coupon['value'] / 100);
+    } else {
+        $discount = $coupon['value'];
+    }
+    if ($discount > $subtotal) {
+        $discount = $subtotal;
+    }
+    $couponInfo = $coupon;
+}
+
+$amountBeforeVat = max(0, $subtotal - $discount);
+$vat = round($amountBeforeVat * 0.10, 2);
+$total = $amountBeforeVat + $shippingFee + $vat;
 
 $pageTitle = $orderSuccess ? 'Đặt hàng thành công — BestBuy' : 'Thanh toán — BestBuy Store';
 $pageDescription = 'Hoàn tất đơn hàng tại BestBuy Store.';
@@ -278,9 +332,15 @@ require_once __DIR__ . '/includes/header.php';
                         <a href="/" class="flex-1 text-center bg-bb-yellow text-bb-dark font-bold py-3.5 rounded-xl hover:bg-yellow-300 transition-all">
                             ← Tiếp tục mua sắm
                         </a>
-                        <a href="/admin/orders.php" class="flex-1 text-center border-2 border-gray-200 text-gray-600 font-semibold py-3.5 rounded-xl hover:bg-gray-50 transition-all">
-                            📋 Xem đơn hàng (Admin)
+                        <?php if (!empty($_SESSION['user'])): ?>
+                        <a href="/profile.php" class="flex-1 text-center border-2 border-gray-200 text-gray-600 font-semibold py-3.5 rounded-xl hover:bg-gray-50 transition-all">
+                            📋 Xem đơn hàng của tôi
                         </a>
+                        <?php else: ?>
+                        <a href="/auth/register.php" class="flex-1 text-center border-2 border-gray-200 text-gray-600 font-semibold py-3.5 rounded-xl hover:bg-gray-50 transition-all">
+                            👤 Đăng ký để theo dõi đơn hàng
+                        </a>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -323,6 +383,7 @@ require_once __DIR__ . '/includes/header.php';
         <?php endif; ?>
 
         <form method="POST" action="/checkout.php" id="checkout-form" novalidate>
+            <?= csrfField() ?>
             <div class="flex flex-col lg:flex-row gap-8">
 
                 <!-- ── LEFT: Customer Info Form ── -->
@@ -508,6 +569,12 @@ require_once __DIR__ . '/includes/header.php';
                                 <span>Tạm tính (<?= $totalItems ?> SP)</span>
                                 <span class="font-medium"><?= formatPrice($subtotal) ?></span>
                             </div>
+                            <?php if ($discount > 0): ?>
+                            <div class="flex justify-between text-green-600">
+                                <span>Giảm giá (<?= htmlspecialchars($couponInfo['code']) ?>)</span>
+                                <span class="font-medium">-<?= formatPrice($discount) ?></span>
+                            </div>
+                            <?php endif; ?>
                             <div class="flex justify-between text-gray-600">
                                 <span>Phí vận chuyển</span>
                                 <span class="font-medium <?= $shippingFee == 0 ? 'text-green-600' : '' ?>">

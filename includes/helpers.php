@@ -35,11 +35,11 @@ function renderStars(float $rating, int $reviewCount = 0): string
 }
 
 /**
- * Format giá tiền USD
+ * Format giá tiền VNĐ
  */
 function formatPrice(float $price): string
 {
-    return '$' . number_format($price, 2);
+    return number_format($price, 0, ',', '.') . ' VNĐ';
 }
 
 /**
@@ -138,4 +138,56 @@ function renderProductCard(array $product): string
             </div>
         </div>
     </div>';
+}
+
+// ═══════════════════════════════════════════
+// SECURITY & ANTI-CSRF FUNCTIONS
+// ═══════════════════════════════════════════
+
+/**
+ * Khởi tạo/Lấy CSRF Token từ session
+ */
+function generateCsrfToken(): string
+{
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    if (empty($_SESSION['csrf_token'])) {
+        try {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        } catch (Exception $e) {
+            // Fallback nếu random_bytes lỗi (rất hiếm)
+            $_SESSION['csrf_token'] = bin2hex(openssl_random_pseudo_bytes(32));
+        }
+    }
+    return $_SESSION['csrf_token'];
+}
+
+/**
+ * Render input hidden chứa CSRF Token dùng cho form
+ */
+function csrfField(): string
+{
+    $token = generateCsrfToken();
+    return '<input type="hidden" name="csrf_token" value="' . htmlspecialchars($token) . '">';
+}
+
+/**
+ * Xác thực CSRF Token từ biến POST
+ * @throws Exception nếu token không hợp lệ
+ */
+function verifyCsrfToken()
+{
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        $sessionToken = $_SESSION['csrf_token'] ?? '';
+        $postToken    = $_POST['csrf_token'] ?? '';
+
+        if (empty($sessionToken) || empty($postToken) || !hash_equals($sessionToken, $postToken)) {
+            // Xóa session liên quan nếu nghi ngờ tấn công
+            die('CSRF Token validation failed. Refresh the page and try again.');
+        }
+    }
 }

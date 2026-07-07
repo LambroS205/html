@@ -22,6 +22,7 @@
         return confirm(msg || 'Bạn có chắc chắn muốn xóa?');
     }
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
     @keyframes slideInUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
     </style>

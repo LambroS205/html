@@ -5,7 +5,7 @@
  */
 
 $pageTitle = 'BestBuy — Mua sắm điện tử chính hãng giá tốt nhất';
-$pageDescription = 'Khám phá laptop, điện thoại, TV, tai nghe chính hãng. Giảm giá đến 30%. Miễn phí vận chuyển đơn từ $35.';
+$pageDescription = 'Khám phá laptop, điện thoại, TV, tai nghe chính hãng. Giảm giá đến 30%. Miễn phí vận chuyển đơn từ 35 VNĐ.';
 $activeCategory = '';
 
 require_once __DIR__ . '/includes/header.php';
@@ -102,7 +102,7 @@ $categoriesWithCount = $pdo->query("
                         </span>
                         <span class="flex items-center gap-1.5">
                             <svg class="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
-                            Ship miễn phí từ $35
+                            Ship miễn phí từ 35 VNĐ
                         </span>
                     </div>
                 </div>
@@ -121,7 +121,7 @@ $categoriesWithCount = $pdo->query("
                             <p class="text-white font-semibold text-lg">MacBook Pro M4</p>
                             <p class="text-blue-200/60 text-sm mt-1 mb-3">Hiệu năng vượt trội</p>
                             <span class="inline-block bg-bb-yellow text-bb-dark text-sm font-bold px-4 py-1.5 rounded-full">
-                                Từ $2,299
+                                Từ 2.299 VNĐ
                             </span>
                         </div>
                     </div>
@@ -225,7 +225,7 @@ $categoriesWithCount = $pdo->query("
                     <div class="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-2xl">🚚</div>
                     <div>
                         <h4 class="font-semibold text-gray-800 text-sm">Miễn phí vận chuyển</h4>
-                        <p class="text-xs text-gray-400 mt-0.5">Đơn hàng từ $35</p>
+                        <p class="text-xs text-gray-400 mt-0.5">Đơn hàng từ 35 VNĐ</p>
                     </div>
                 </div>
                 <div class="flex flex-col items-center gap-3">

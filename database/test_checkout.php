@@ -20,17 +20,17 @@ foreach ($cartItems as $item) {
     $subtotal += (float) $item['price'] * (int) $item['quantity'];
 }
 
-$shippingFee = ($subtotal >= 35) ? 0 : 5.00;
+$shippingFee = ($subtotal >= 875000) ? 0 : 125000;
 $vat = round($subtotal * 0.10, 2);
 $total = $subtotal + $shippingFee + $vat;
 $orderCode = 'BB-' . strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 6));
 
 echo "=== TEST CHECKOUT TRANSACTION ===\n";
 echo "Cart: " . count($cartItems) . " items\n";
-echo "Subtotal: $" . number_format($subtotal, 2) . "\n";
-echo "Shipping: $" . number_format($shippingFee, 2) . "\n";
-echo "VAT (10%): $" . number_format($vat, 2) . "\n";
-echo "Total: $" . number_format($total, 2) . "\n";
+echo "Subtotal: " . number_format($subtotal, 0, ',', '.') . " VNĐ\n";
+echo "Shipping: " . number_format($shippingFee, 0, ',', '.') . " VNĐ\n";
+echo "VAT (10%): " . number_format($vat, 0, ',', '.') . " VNĐ\n";
+echo "Total: " . number_format($total, 0, ',', '.') . " VNĐ\n";
 echo "Order Code: $orderCode\n\n";
 
 try {
@@ -73,13 +73,13 @@ try {
     echo "Verification:\n";
     echo "  Code: " . $order['order_code'] . "\n";
     echo "  Customer: " . $order['customer_name'] . "\n";
-    echo "  Total: $" . number_format($order['total'], 2) . "\n";
+    echo "  Total: " . number_format($order['total'], 0, ',', '.') . " VNĐ\n";
     echo "  Status: " . $order['status'] . "\n";
 
     $items = $pdo->query("SELECT * FROM order_items WHERE order_id = $orderId")->fetchAll();
     echo "  Items: " . count($items) . "\n";
     foreach ($items as $i) {
-        echo "    - " . $i['product_name'] . " x" . $i['quantity'] . " = $" . number_format($i['price'] * $i['quantity'], 2) . "\n";
+        echo "    - " . $i['product_name'] . " x" . $i['quantity'] . " = " . number_format($i['price'] * $i['quantity'], 0, ',', '.') . " VNĐ\n";
     }
 
     echo "\n✅ ALL CHECKOUT TESTS PASSED!\n";

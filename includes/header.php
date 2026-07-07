@@ -34,7 +34,7 @@ $navCategories = $pdo->query("SELECT id, name, slug, icon FROM categories ORDER 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($pageTitle ?? 'BestBuy — Mua sắm điện tử chính hãng giá tốt nhất') ?></title>
-    <meta name="description" content="<?= htmlspecialchars($pageDescription ?? 'Cửa hàng điện tử trực tuyến — Laptop, Điện thoại, Tivi, Tai nghe chính hãng giá tốt nhất. Miễn phí vận chuyển đơn từ $35.') ?>">
+    <meta name="description" content="<?= htmlspecialchars($pageDescription ?? 'Cửa hàng điện tử trực tuyến — Laptop, Điện thoại, Tivi, Tai nghe chính hãng giá tốt nhất. Miễn phí vận chuyển đơn từ 35 VNĐ.') ?>">
     <meta name="robots" content="index, follow">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23FFE000'/><text x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' font-size='18' font-weight='900' fill='%23001E73'>B</text></svg>">
 
@@ -79,7 +79,7 @@ $navCategories = $pdo->query("SELECT id, name, slug, icon FROM categories ORDER 
                     Giao hàng toàn quốc
                 </span>
                 <span class="text-gray-600">|</span>
-                <span class="text-bb-yellow font-medium">🔥 Miễn phí vận chuyển đơn từ $35</span>
+                <span class="text-bb-yellow font-medium">🔥 Miễn phí vận chuyển đơn từ 35 VNĐ</span>
             </div>
             <div class="flex items-center gap-4">
                 <a href="#" class="hover:text-white transition-colors">Theo dõi đơn hàng</a>
@@ -128,25 +128,60 @@ $navCategories = $pdo->query("SELECT id, name, slug, icon FROM categories ORDER 
                         </button>
                     </form>
                     <!-- Live search dropdown -->
-                    <div id="search-dropdown" class="search-dropdown"></div>
+                    <div id="search-dropdown" class="search-dropdown" role="listbox" aria-live="polite" aria-label="Kết quả tìm kiếm"></div>
                 </div>
 
-                <!-- Header Actions -->
-                <div class="flex items-center gap-2 md:gap-4">
-                    <!-- Account (placeholder) -->
-                    <a href="#" class="hidden md:flex items-center gap-2 text-white hover:text-bb-yellow transition-colors text-sm">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-                        <span class="hidden lg:inline">Tài khoản</span>
-                    </a>
+                    <!-- Account — Dynamic based on login state -->
+                    <?php if (!empty($_SESSION['user'])): ?>
+                        <!-- Logged in: Show user menu -->
+                        <div class="hidden md:block relative" id="user-menu-wrapper">
+                            <button id="user-menu-btn" class="flex items-center gap-2 text-white hover:text-bb-yellow transition-colors text-sm">
+                                <div class="w-7 h-7 bg-bb-yellow/20 rounded-full flex items-center justify-center text-bb-yellow text-xs font-bold border border-bb-yellow/30">
+                                    <?= strtoupper(mb_substr($_SESSION['user']['name'], 0, 1)) ?>
+                                </div>
+                                <span class="hidden lg:inline max-w-[100px] truncate"><?= htmlspecialchars($_SESSION['user']['name']) ?></span>
+                                <svg class="w-3.5 h-3.5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </button>
+                            <!-- Dropdown menu -->
+                            <div id="user-dropdown" class="hidden absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-50">
+                                <div class="px-4 py-3 border-b border-gray-100">
+                                    <p class="text-sm font-semibold text-gray-800 truncate"><?= htmlspecialchars($_SESSION['user']['name']) ?></p>
+                                    <p class="text-xs text-gray-400 truncate"><?= htmlspecialchars($_SESSION['user']['email']) ?></p>
+                                </div>
+                                <a href="/profile.php" class="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-bb-blue transition-colors">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                                    Hồ sơ & Đơn hàng
+                                </a>
+                                <?php if ($_SESSION['user']['role'] === 'admin'): ?>
+                                <a href="/admin/" class="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-bb-blue transition-colors">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                    Quản trị
+                                </a>
+                                <?php endif; ?>
+                                <div class="border-t border-gray-100">
+                                    <a href="/auth/logout.php" class="flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                                        Đăng xuất
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    <?php else: ?>
+                        <!-- Not logged in: Login link -->
+                        <a href="/auth/login.php" class="hidden md:flex items-center gap-2 text-white hover:text-bb-yellow transition-colors text-sm">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                            <span class="hidden lg:inline">Đăng nhập</span>
+                        </a>
+                    <?php endif; ?>
 
                     <!-- Cart -->
-                    <a href="/cart.php" id="cart-link" class="relative flex items-center gap-2 text-white hover:text-bb-yellow transition-colors text-sm group">
+                    <button type="button" id="cart-link" onclick="openCartDrawer()" class="relative flex items-center gap-2 text-white hover:text-bb-yellow transition-colors text-sm group">
                         <div class="relative">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"></path></svg>
                             <span id="cart-badge" class="cart-badge absolute -top-2 -right-2.5 bg-bb-yellow text-bb-dark text-[10px] font-black min-w-[20px] h-5 rounded-full flex items-center justify-center shadow <?= $cartCount > 0 ? '' : 'hidden' ?>"><?= $cartCount ?></span>
                         </div>
                         <span class="hidden lg:inline">Giỏ hàng</span>
-                    </a>
+                    </button>
                 </div>
             </div>
         </div>
@@ -197,15 +232,30 @@ $navCategories = $pdo->query("SELECT id, name, slug, icon FROM categories ORDER 
             </nav>
             <hr class="my-4 border-gray-200">
             <nav class="space-y-1">
-                <a href="/cart.php" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors">
+                <button type="button" onclick="openCartDrawer()" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors text-left">
                     <span>🛒</span> <span>Giỏ hàng</span>
-                    <?php if ($cartCount > 0): ?>
-                        <span class="ml-auto bg-bb-blue text-white text-xs font-bold px-2 py-0.5 rounded-full"><?= $cartCount ?></span>
+                    <span id="mobile-cart-badge" class="<?= $cartCount > 0 ? '' : 'hidden' ?> ml-auto bg-bb-blue text-white text-xs font-bold px-2 py-0.5 rounded-full"><?= $cartCount ?></span>
+                </button>
+                <?php if (!empty($_SESSION['user'])): ?>
+                    <a href="/profile.php" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors">
+                        <span>👤</span> <span>Hồ sơ & Đơn hàng</span>
+                    </a>
+                    <?php if ($_SESSION['user']['role'] === 'admin'): ?>
+                    <a href="/admin/" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors">
+                        <span>⚙️</span> <span>Quản trị</span>
+                    </a>
                     <?php endif; ?>
-                </a>
-                <a href="/admin/" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors">
-                    <span>⚙️</span> <span>Quản trị</span>
-                </a>
+                    <a href="/auth/logout.php" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-red-50 text-red-500 transition-colors">
+                        <span>🚪</span> <span>Đăng xuất</span>
+                    </a>
+                <?php else: ?>
+                    <a href="/auth/login.php" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors">
+                        <span>🔑</span> <span>Đăng nhập</span>
+                    </a>
+                    <a href="/auth/register.php" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-blue-50 text-bb-blue transition-colors">
+                        <span>✨</span> <span>Đăng ký</span>
+                    </a>
+                <?php endif; ?>
             </nav>
         </div>
     </div>

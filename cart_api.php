@@ -80,21 +80,19 @@ try {
                 $_SESSION['cart'][$cartKey]['quantity'] = $product['stock'];
             }
 
-            $response = [
+            $response = array_merge([
                 'success'   => true,
                 'message'   => 'Đã thêm vào giỏ hàng',
-                'cartCount' => getCartCount(),
-            ];
+            ], getCartSummary());
             break;
 
         case 'remove':
             $cartKey = (string) $productId;
             unset($_SESSION['cart'][$cartKey]);
-            $response = [
+            $response = array_merge([
                 'success'   => true,
                 'message'   => 'Đã xóa khỏi giỏ hàng',
-                'cartCount' => getCartCount(),
-            ];
+            ], getCartSummary());
             break;
 
         case 'update':
@@ -106,19 +104,63 @@ try {
                     $_SESSION['cart'][$cartKey]['quantity'] = $quantity;
                 }
             }
-            $response = [
+            $response = array_merge([
                 'success'   => true,
                 'message'   => 'Đã cập nhật giỏ hàng',
-                'cartCount' => getCartCount(),
+            ], getCartSummary());
+            break;
+
+        case 'apply_coupon':
+            $code = strtoupper(trim($input['code'] ?? ''));
+            if (empty($code)) {
+                throw new Exception('Vui lòng nhập mã giảm giá');
+            }
+
+            $stmt = $pdo->prepare("SELECT * FROM coupons WHERE code = :code AND status = 1 AND (expiry_date IS NULL OR expiry_date >= NOW()) LIMIT 1");
+            $stmt->execute([':code' => $code]);
+            $coupon = $stmt->fetch();
+
+            if (!$coupon) {
+                throw new Exception('Mã giảm giá không hợp lệ hoặc đã hết hạn');
+            }
+
+            // Tính tạm subtotal
+            $subtotal = 0;
+            if (!empty($_SESSION['cart'])) {
+                foreach ($_SESSION['cart'] as $item) {
+                    $subtotal += (float)$item['price'] * (int)$item['quantity'];
+                }
+            }
+
+            if ($subtotal < (float)$coupon['min_order_value']) {
+                throw new Exception('Đơn hàng chưa đạt giá trị tối thiểu ' . number_format($coupon['min_order_value'], 0, ',', '.') . ' VNĐ để áp dụng mã này');
+            }
+
+            $_SESSION['coupon'] = [
+                'id' => $coupon['id'],
+                'code' => $coupon['code'],
+                'type' => $coupon['type'],
+                'value' => (float)$coupon['value']
             ];
+
+            $response = array_merge([
+                'success' => true,
+                'message' => 'Áp dụng mã giảm giá thành công'
+            ], getCartSummary());
+            break;
+
+        case 'remove_coupon':
+            unset($_SESSION['coupon']);
+            $response = array_merge([
+                'success' => true,
+                'message' => 'Đã gỡ mã giảm giá'
+            ], getCartSummary());
             break;
 
         case 'get':
-            $response = [
-                'success'   => true,
-                'cart'      => array_values($_SESSION['cart']),
-                'cartCount' => getCartCount(),
-            ];
+            $response = array_merge([
+                'success' => true
+            ], getCartSummary());
             break;
 
         default:
@@ -136,15 +178,59 @@ try {
 }
 
 /**
- * Đếm tổng số items trong giỏ hàng
+ * Lấy tóm tắt giỏ hàng (sản phẩm, số lượng, subtotal, discount, shipping, vat, total)
  */
-function getCartCount(): int
+function getCartSummary(): array
 {
-    $count = 0;
-    if (!empty($_SESSION['cart'])) {
-        foreach ($_SESSION['cart'] as $item) {
-            $count += (int) ($item['quantity'] ?? 0);
-        }
+    $cartItems = $_SESSION['cart'] ?? [];
+    $subtotal = 0;
+    $totalItems = 0;
+
+    foreach ($cartItems as $item) {
+        $subtotal += (float) $item['price'] * (int) $item['quantity'];
+        $totalItems += (int) $item['quantity'];
     }
-    return $count;
+
+    $discount = 0;
+    $couponData = null;
+    if (isset($_SESSION['coupon'])) {
+        $coupon = $_SESSION['coupon'];
+        if ($coupon['type'] === 'percent') {
+            $discount = $subtotal * ($coupon['value'] / 100);
+        } else {
+            $discount = $coupon['value'];
+        }
+        // Giới hạn giảm giá không vượt quá subtotal
+        if ($discount > $subtotal) {
+            $discount = $subtotal;
+        }
+        $couponData = [
+            'code' => $coupon['code'],
+            'discount_amount' => $discount
+        ];
+    }
+
+    $freeShippingThreshold = 875000;
+    $shippingFee = ($subtotal >= $freeShippingThreshold || $subtotal == 0) ? 0 : 125000;
+    
+    // Tạm tính trước VAT
+    $amountBeforeVat = max(0, $subtotal - $discount);
+    $vatRate = 0.10; // 10%
+    $vat = $amountBeforeVat * $vatRate;
+    
+    $total = $amountBeforeVat + $shippingFee + $vat;
+
+    return [
+        'cart' => array_values($cartItems),
+        'cartCount' => $totalItems,
+        'summary' => [
+            'subtotal' => round($subtotal, 2),
+            'discount' => round($discount, 2),
+            'shipping' => round($shippingFee, 2),
+            'vat'      => round($vat, 2),
+            'total'    => round($total, 2)
+        ],
+        'coupon' => $couponData,
+        'freeShippingThreshold' => $freeShippingThreshold
+    ];
 }

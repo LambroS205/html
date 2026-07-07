@@ -61,7 +61,7 @@
                             <span class="text-green-400">✓</span> Thẻ Visa / Mastercard
                         </li>
                         <li class="flex items-center gap-2">
-                            <span class="text-green-400">✓</span> Miễn phí ship đơn từ $35
+                            <span class="text-green-400">✓</span> Miễn phí ship đơn từ 35 VNĐ
                         </li>
                         <li class="flex items-center gap-2">
                             <span class="text-green-400">✓</span> Giao hàng toàn quốc
@@ -90,7 +90,77 @@
     <!-- Toast Notification Container -->
     <div id="toast-container" class="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none"></div>
 
+    <!-- ═══════════════════════════════════════
+         CART DRAWER
+         ═══════════════════════════════════════ -->
+    <div id="cart-drawer-overlay" class="fixed inset-0 bg-black/50 z-[100] hidden opacity-0 transition-opacity duration-300" onclick="closeCartDrawer()"></div>
+    <div id="cart-drawer" class="fixed top-0 right-0 h-full w-full max-w-md bg-gray-50 z-[101] transform translate-x-full transition-transform duration-300 flex flex-col shadow-2xl">
+        <!-- Header -->
+        <div class="px-6 py-4 bg-white border-b border-gray-100 flex items-center justify-between shrink-0">
+            <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <svg class="w-6 h-6 text-bb-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"></path></svg>
+                Giỏ hàng <span id="drawer-cart-count" class="text-sm font-normal text-gray-400">(0)</span>
+            </h2>
+            <button onclick="closeCartDrawer()" class="text-gray-400 hover:text-gray-800 transition-colors bg-gray-100 hover:bg-gray-200 rounded-full p-1.5">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+
+        <!-- Body (Items) -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-4" id="drawer-cart-items">
+            <!-- Loading state -->
+            <div class="flex justify-center items-center h-full text-gray-400">
+                <svg class="animate-spin w-8 h-8 text-bb-blue" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            </div>
+        </div>
+
+        <!-- Footer (Summary & Coupon) -->
+        <div class="bg-white border-t border-gray-100 p-6 shrink-0 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
+            <!-- Coupon Input -->
+            <div class="mb-4 flex gap-2">
+                <input type="text" id="coupon-input" placeholder="Mã giảm giá..." class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-bb-blue focus:ring-1 focus:ring-bb-blue outline-none transition-shadow uppercase">
+                <button type="button" onclick="applyCoupon()" class="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-800 transition-colors">Áp dụng</button>
+            </div>
+            <!-- Coupon Status -->
+            <div id="coupon-status" class="mb-4 hidden text-sm flex items-center justify-between bg-green-50 text-green-700 px-3 py-2 rounded-lg border border-green-100">
+                <span id="coupon-message" class="font-medium"></span>
+                <button type="button" onclick="removeCoupon()" class="text-green-800 hover:text-red-600 transition-colors" title="Gỡ mã">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <!-- Summary -->
+            <div class="space-y-2 text-sm mb-4">
+                <div class="flex justify-between text-gray-600">
+                    <span>Tạm tính</span>
+                    <span id="drawer-subtotal" class="font-medium">0$</span>
+                </div>
+                <div id="drawer-discount-row" class="flex justify-between text-green-600 hidden">
+                    <span>Giảm giá</span>
+                    <span id="drawer-discount" class="font-medium">-0$</span>
+                </div>
+                <div class="flex justify-between text-gray-600">
+                    <span>Phí vận chuyển</span>
+                    <span id="drawer-shipping" class="font-medium">0$</span>
+                </div>
+                <div class="flex justify-between text-gray-600">
+                    <span>VAT (10%)</span>
+                    <span id="drawer-vat" class="font-medium">0$</span>
+                </div>
+            </div>
+            <div class="flex justify-between items-baseline border-t border-gray-100 pt-3 mb-5">
+                <span class="text-base font-bold text-gray-900">Tổng cộng</span>
+                <span id="drawer-total" class="text-2xl font-black text-bb-blue">0$</span>
+            </div>
+            
+            <a href="/checkout.php" id="drawer-checkout-btn" class="block w-full text-center bg-bb-yellow text-bb-dark font-bold py-3.5 rounded-xl hover:bg-yellow-300 active:scale-[0.98] transition-all shadow-lg shadow-yellow-500/20 text-base">
+                Thanh toán ngay →
+            </a>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="/assets/js/main.js"></script>
+    <script src="/assets/js/cart_drawer.js"></script>
 </body>
 </html>

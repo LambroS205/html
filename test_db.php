@@ -195,13 +195,13 @@ echo '<table>
 
 foreach ($products as $p) {
     $saleHtml = $p['sale_price']
-        ? '<span class="badge badge-sale">$' . number_format($p['sale_price'], 2) . '</span>'
+        ? '<span class="badge badge-sale">' . number_format($p['sale_price'], 0, ',', '.') . ' VNĐ</span>'
         : '—';
 
     echo '<tr>
             <td>' . htmlspecialchars($p['name']) . '</td>
             <td>' . $p['icon'] . ' ' . htmlspecialchars($p['category']) . '</td>
-            <td>$' . number_format($p['price'], 2) . '</td>
+            <td>' . number_format($p['price'], 0, ',', '.') . ' VNĐ</td>
             <td>' . $saleHtml . '</td>
             <td><span class="badge badge-stock">' . $p['stock'] . '</span></td>
             <td>⭐ ' . $p['rating'] . '</td>

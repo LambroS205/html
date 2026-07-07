@@ -34,6 +34,22 @@ $topProducts = $pdo->query("
     ORDER BY total_sold DESC, p.rating DESC
     LIMIT 5
 ")->fetchAll();
+
+// ── Chart Data: Doanh thu 7 ngày ──
+$revenueChartData = $pdo->query("
+    SELECT DATE(created_at) as date, SUM(total) as revenue
+    FROM orders
+    WHERE created_at >= DATE(NOW() - INTERVAL 6 DAY) AND status != 'cancelled'
+    GROUP BY DATE(created_at)
+    ORDER BY DATE(created_at) ASC
+")->fetchAll();
+
+// ── Chart Data: Trạng thái đơn hàng ──
+$statusChartData = $pdo->query("
+    SELECT status, COUNT(*) as count
+    FROM orders
+    GROUP BY status
+")->fetchAll();
 ?>
 
     <!-- ═══ STAT CARDS ═══ -->
@@ -80,6 +96,25 @@ $topProducts = $pdo->query("
                 </div>
             </div>
             <p class="text-3xl font-bold text-white"><?= $pendingOrders ?></p>
+        </div>
+    </div>
+
+    <!-- ═══ CHARTS ═══ -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <!-- Revenue Chart -->
+        <div class="bg-admin-card rounded-2xl border border-admin-border p-5 lg:col-span-2">
+            <h2 class="font-bold text-white mb-4">Doanh thu 7 ngày qua</h2>
+            <div class="relative h-72 w-full">
+                <canvas id="revenueChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Order Status Chart -->
+        <div class="bg-admin-card rounded-2xl border border-admin-border p-5 lg:col-span-1">
+            <h2 class="font-bold text-white mb-4">Trạng thái đơn hàng</h2>
+            <div class="relative h-72 w-full flex justify-center">
+                <canvas id="statusChart"></canvas>
+            </div>
         </div>
     </div>
 
@@ -143,5 +178,155 @@ $topProducts = $pdo->query("
             </div>
         </div>
     </div>
+
+    <!-- ═══ CHART SCRIPT ═══ -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Parse data from PHP
+        const revenueDataRaw = <?= json_encode($revenueChartData) ?>;
+        const statusDataRaw = <?= json_encode($statusChartData) ?>;
+
+        // Process Revenue Data (fill missing days)
+        const labels = [];
+        const dataRevenue = [];
+        // Generate last 7 days labels
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const dateStr = d.toISOString().split('T')[0];
+            const shortDate = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+            
+            labels.push(shortDate);
+            // Find if we have revenue for this date
+            const record = revenueDataRaw.find(r => r.date === dateStr);
+            dataRevenue.push(record ? parseFloat(record.revenue) : 0);
+        }
+
+        // Configure Chart.js global defaults for Dark Mode
+        Chart.defaults.color = '#9ca3af'; // gray-400
+        Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
+        Chart.defaults.font.family = "'Inter', sans-serif";
+
+        // Initialize Revenue Line Chart
+        const ctxRev = document.getElementById('revenueChart').getContext('2d');
+        
+        // Gradient for line chart
+        const gradient = ctxRev.createLinearGradient(0, 0, 0, 300);
+        gradient.addColorStop(0, 'rgba(253, 216, 53, 0.5)'); // bb-yellow
+        gradient.addColorStop(1, 'rgba(253, 216, 53, 0.0)');
+
+        new Chart(ctxRev, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Doanh thu ($)',
+                    data: dataRevenue,
+                    borderColor: '#fdd835', // bb-yellow
+                    backgroundColor: gradient,
+                    borderWidth: 3,
+                    pointBackgroundColor: '#1f2937',
+                    pointBorderColor: '#fdd835',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    fill: true,
+                    tension: 0.4 // smooth curve
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1f2937',
+                        titleColor: '#fff',
+                        bodyColor: '#e5e7eb',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1,
+                        padding: 10,
+                        displayColors: false,
+                        callbacks: {
+                            label: function(context) {
+                                return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return '$' + value;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Process Status Data
+        const statusMap = {
+            'pending': { label: 'Chờ xử lý', color: '#fb923c' },     // orange-400
+            'processing': { label: 'Đang xử lý', color: '#60a5fa' },  // blue-400
+            'shipped': { label: 'Đang giao', color: '#c084fc' },      // purple-400
+            'delivered': { label: 'Đã giao', color: '#4ade80' },      // green-400
+            'cancelled': { label: 'Đã hủy', color: '#f87171' }        // red-400
+        };
+
+        const statusLabels = [];
+        const statusCounts = [];
+        const statusColors = [];
+
+        statusDataRaw.forEach(item => {
+            const config = statusMap[item.status] || { label: item.status, color: '#9ca3af' };
+            statusLabels.push(config.label);
+            statusCounts.push(parseInt(item.count));
+            statusColors.push(config.color);
+        });
+
+        // If no data, show a dummy empty slice
+        if (statusCounts.length === 0) {
+            statusLabels.push('Chưa có đơn hàng');
+            statusCounts.push(1);
+            statusColors.push('rgba(255,255,255,0.05)');
+        }
+
+        // Initialize Order Status Doughnut Chart
+        const ctxStatus = document.getElementById('statusChart').getContext('2d');
+        new Chart(ctxStatus, {
+            type: 'doughnut',
+            data: {
+                labels: statusLabels,
+                datasets: [{
+                    data: statusCounts,
+                    backgroundColor: statusColors,
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '70%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            usePointStyle: true,
+                            pointStyle: 'circle'
+                        }
+                    }
+                }
+            }
+        });
+    });
+    </script>
 
 <?php require_once __DIR__ . '/includes/admin_footer.php'; ?>

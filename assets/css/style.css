@@ -1,6 +1,11 @@
 /* ============================================
-   BestBuy Store — Custom CSS
+   BestBuy Store — Custom CSS (Upgraded Step 1)
    Animations, transitions, and overrides beyond Tailwind
+   
+   Nâng cấp:
+   - Search dropdown: thumbnail layout, keyboard active state, highlight
+   - Toast: progress bar, close button, slide-in animation
+   - Giữ nguyên tất cả animations cũ
    ============================================ */
 
 /* ── Base ── */
@@ -144,7 +149,9 @@ body {
     background: rgba(0, 70, 190, 0.06);
 }
 
-/* ── Search Bar ── */
+/* ═══════════════════════════════════════
+   SEARCH BAR & DROPDOWN (NÂNG CẤP)
+   ═══════════════════════════════════════ */
 .search-input:focus {
     box-shadow: 0 0 0 3px rgba(0, 70, 190, 0.3);
     outline: none;
@@ -153,70 +160,255 @@ body {
 .search-dropdown {
     display: none;
     position: absolute;
-    top: 100%;
+    top: calc(100% + 4px);
     left: 0;
     right: 0;
     background: white;
-    border-radius: 0 0 12px 12px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+    border-radius: 16px;
+    box-shadow: 
+        0 20px 60px rgba(0, 0, 0, 0.12),
+        0 8px 24px rgba(0, 0, 0, 0.08),
+        0 0 0 1px rgba(0, 0, 0, 0.04);
     z-index: 100;
-    max-height: 400px;
+    max-height: 440px;
     overflow-y: auto;
+    overflow-x: hidden;
+    backdrop-filter: blur(20px);
 }
 
 .search-dropdown.active {
     display: block;
-    animation: scaleIn 0.2s ease-out;
+    animation: searchDropdownIn 0.25s cubic-bezier(0.2, 0, 0, 1);
 }
 
+@keyframes searchDropdownIn {
+    from {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ── Dropdown Item — với ảnh thumbnail ── */
 .search-dropdown-item {
     padding: 10px 16px;
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: 12px;
-    transition: background 0.15s;
+    transition: all 0.15s ease;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+    text-decoration: none;
+}
+
+.search-dropdown-item:last-of-type {
+    border-bottom: none;
 }
 
 .search-dropdown-item:hover {
-    background: #f0f2f5;
+    background: linear-gradient(135deg, #f8f9ff, #f0f4ff);
 }
 
-/* ── Toast Notifications ── */
+/* Keyboard navigation: item đang được chọn */
+.search-dropdown-item.search-item-active {
+    background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+    outline: 2px solid #0046BE;
+    outline-offset: -2px;
+    border-radius: 8px;
+}
+
+/* Ảnh thumbnail trong dropdown */
+.search-item-thumb {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, #f9fafb, #f3f4f6);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.search-item-thumb img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+/* Highlight từ khóa trong kết quả */
+.search-highlight {
+    background: linear-gradient(135deg, #fef08a, #fde047);
+    color: #92400e;
+    padding: 0 2px;
+    border-radius: 2px;
+    font-weight: 600;
+}
+
+/* Link "Xem tất cả" ở cuối dropdown */
+.search-dropdown-viewall {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px 16px;
+    text-align: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #0046BE;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    transition: all 0.15s ease;
+    text-decoration: none;
+}
+
+.search-dropdown-viewall:hover {
+    background: #f0f4ff;
+    color: #001E73;
+    gap: 10px;
+}
+
+/* ═══════════════════════════════════════
+   TOAST NOTIFICATIONS (NÂNG CẤP)
+   
+   Cải tiến:
+   - Icon SVG cho từng type
+   - Nút đóng thủ công
+   - Progress bar countdown
+   - Slide-in animation từ phải
+   - Stacking thông minh
+   ═══════════════════════════════════════ */
+
+/* Container: đảm bảo toast stack từ dưới lên */
+#toast-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+/* Toast base */
 .toast {
-    padding: 14px 24px;
-    border-radius: 12px;
+    min-width: 320px;
+    max-width: 420px;
+    border-radius: 14px;
     color: white;
-    font-size: 0.9rem;
+    font-size: 0.875rem;
     font-weight: 500;
+    box-shadow: 
+        0 12px 40px rgba(0, 0, 0, 0.15),
+        0 4px 12px rgba(0, 0, 0, 0.1);
+    pointer-events: auto;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateX(100%) scale(0.95);
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toast.toast-visible {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+}
+
+/* Toast body — icon + message + close */
+.toast-body {
     display: flex;
     align-items: center;
     gap: 10px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-    pointer-events: auto;
-    animation: slideInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    backdrop-filter: blur(10px);
+    padding: 14px 16px;
 }
 
+.toast-message {
+    flex: 1;
+    line-height: 1.4;
+}
+
+/* Close button */
+.toast-close {
+    padding: 4px;
+    border-radius: 6px;
+    opacity: 0.7;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    background: none;
+    border: none;
+    color: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.toast-close:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Progress bar */
+.toast-progress {
+    height: 3px;
+    background: rgba(255, 255, 255, 0.15);
+    overflow: hidden;
+}
+
+.toast-progress-bar {
+    height: 100%;
+    width: 100%;
+    transform-origin: left;
+    animation: toastCountdown linear forwards;
+}
+
+@keyframes toastCountdown {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+}
+
+/* Type-specific colors */
 .toast-success {
     background: linear-gradient(135deg, #059669, #10b981);
+}
+.toast-progress-success {
+    background: rgba(255, 255, 255, 0.5);
 }
 
 .toast-error {
     background: linear-gradient(135deg, #dc2626, #ef4444);
 }
+.toast-progress-error {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.toast-warning {
+    background: linear-gradient(135deg, #d97706, #f59e0b);
+}
+.toast-progress-warning {
+    background: rgba(255, 255, 255, 0.5);
+}
 
 .toast-info {
     background: linear-gradient(135deg, #0046BE, #2563eb);
 }
-
-.toast.removing {
-    animation: fadeOut 0.3s ease-out forwards;
+.toast-progress-info {
+    background: rgba(255, 255, 255, 0.5);
 }
 
-@keyframes fadeOut {
-    to { opacity: 0; transform: translateY(10px) scale(0.95); }
+/* Toast removing animation */
+.toast.toast-removing {
+    opacity: 0;
+    transform: translateX(120%) scale(0.9);
+    transition: all 0.35s cubic-bezier(0.6, -0.28, 0.74, 0.05);
+    max-height: 0;
+    margin-bottom: -10px;
+    padding: 0;
+    overflow: hidden;
 }
+
+/* ══════════════════════════════════════
+   REMAINING STYLES (giữ nguyên)
+   ══════════════════════════════════════ */
 
 /* ── Hero Banner Gradient Overlay ── */
 .hero-gradient {
@@ -276,6 +468,12 @@ body {
     .hero-gradient {
         min-height: 350px;
     }
+    
+    /* Toast responsive */
+    .toast {
+        min-width: 280px;
+        max-width: calc(100vw - 48px);
+    }
 }
 
 /* ── Custom scrollbar for search dropdown ── */
@@ -292,7 +490,20 @@ body {
     border-radius: 3px;
 }
 
+.search-dropdown::-webkit-scrollbar-thumb:hover {
+    background: #999;
+}
+
 /* ── Sticky header shadow on scroll ── */
 .header-scrolled {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* ── No scrollbar utility ── */
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
 }
