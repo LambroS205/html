@@ -13,6 +13,12 @@ require_once __DIR__ . '/../../../includes/header.php';
 // ── Lấy dữ liệu sản phẩm ──
 $pdo = Database::getConnection();
 
+// Lấy cài đặt giao diện
+$settingsList = $pdo->query("SELECT setting_key, setting_value FROM settings")->fetchAll(PDO::FETCH_KEY_PAIR);
+function getHomeSetting($key, $settingsList, $default = '') {
+    return $settingsList[$key] ?? $default;
+}
+
 // Featured products — hiển thị ở phần "Sản phẩm nổi bật" (Tính real-time dựa trên doanh số và rating thực)
 $featuredProducts = $pdo->query("
     SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug,
@@ -72,6 +78,7 @@ $categoriesWithCount = $pdo->query("
     <!-- ═══════════════════════════════════════
          HERO BANNER — Gradient background + animated shapes
          ═══════════════════════════════════════ -->
+    <?php if (getHomeSetting('show_home_hero', $settingsList, '1') == '1'): ?>
     <section class="hero-gradient relative overflow-hidden">
         <!-- Animated background shapes -->
         <div class="absolute inset-0 overflow-hidden pointer-events-none">
@@ -87,20 +94,17 @@ $categoriesWithCount = $pdo->query("
                 <div>
                     <span class="inline-flex items-center gap-2 bg-bb-yellow/15 text-bb-yellow text-sm font-semibold px-4 py-2 rounded-full mb-6 backdrop-blur-sm border border-bb-yellow/20">
                         <span class="w-2 h-2 bg-bb-yellow rounded-full animate-pulse"></span>
-                        Flash Sale — Giảm đến 30%
+                        <?= htmlspecialchars(getHomeSetting('home_hero_badge', $settingsList, 'Flash Sale — Giảm đến 30%')) ?>
                     </span>
                     <h1 class="text-4xl md:text-5xl lg:text-6xl font-black text-white mb-6 leading-tight">
-                        Công nghệ<br>
-                        <span class="text-bb-yellow">đỉnh cao</span><br>
-                        <span class="text-blue-200">Giá không tưởng</span>
+                        <?= getHomeSetting('home_hero_title', $settingsList, 'Công nghệ<br><span class="text-bb-yellow">đỉnh cao</span><br><span class="text-blue-200">Giá không tưởng</span>') ?>
                     </h1>
                     <p class="text-base md:text-lg text-blue-200/70 mb-8 max-w-lg leading-relaxed">
-                        Khám phá bộ sưu tập laptop, điện thoại, TV và phụ kiện 
-                        chính hãng mới nhất với ưu đãi hấp dẫn chưa từng có.
+                        <?= nl2br(htmlspecialchars(getHomeSetting('home_hero_desc', $settingsList, 'Khám phá bộ sưu tập laptop, điện thoại, TV và phụ kiện chính hãng mới nhất với ưu đãi hấp dẫn chưa từng có.'))) ?>
                     </p>
                     <div class="flex flex-wrap gap-3">
-                        <a href="#products" class="inline-flex items-center gap-2 bg-bb-yellow text-bb-dark font-bold px-7 py-3.5 rounded-full hover:bg-yellow-300 transition-all duration-300 transform hover:scale-105 shadow-lg shadow-yellow-500/20">
-                            Mua sắm ngay
+                        <a href="<?= htmlspecialchars(getHomeSetting('home_hero_button_link', $settingsList, '#products')) ?>" class="inline-flex items-center gap-2 bg-bb-yellow text-bb-dark font-bold px-7 py-3.5 rounded-full hover:bg-yellow-300 transition-all duration-300 transform hover:scale-105 shadow-lg shadow-yellow-500/20">
+                            <?= htmlspecialchars(getHomeSetting('home_hero_button_text', $settingsList, 'Mua sắm ngay')) ?>
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg>
                         </a>
                         <a href="#deals" class="inline-flex items-center gap-2 border-2 border-white/25 text-white font-semibold px-7 py-3.5 rounded-full hover:bg-white/10 hover:border-white/40 transition-all duration-300">
@@ -189,11 +193,13 @@ $categoriesWithCount = $pdo->query("
             </div>
         </div>
     </section>
+    <?php endif; ?>
 
     <!-- ═══════════════════════════════════════
          CATEGORY SHOWCASE — Grid icons
          ═══════════════════════════════════════ -->
-    <section class="max-w-7xl mx-auto px-4 -mt-8 relative z-20 mb-12">
+    <?php if (getHomeSetting('show_home_categories', $settingsList, '1') == '1'): ?>
+    <section class="max-w-7xl mx-auto px-4 <?= getHomeSetting('show_home_hero', $settingsList, '1') == '1' ? '-mt-8' : 'pt-8' ?> relative z-20 mb-12">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
             <?php foreach ($categoriesWithCount as $cat): ?>
                 <a href="/danh-muc/<?= htmlspecialchars($cat['slug']) ?>" 
@@ -207,6 +213,7 @@ $categoriesWithCount = $pdo->query("
             <?php endforeach; ?>
         </div>
     </section>
+    <?php endif; ?>
 
     <!-- ═══════════════════════════════════════
          DEAL OF THE DAY — Highlighted deals
@@ -236,6 +243,7 @@ $categoriesWithCount = $pdo->query("
     <!-- ═══════════════════════════════════════
          PROMO BANNER — Mid-page CTA
          ═══════════════════════════════════════ -->
+    <?php if (getHomeSetting('show_home_promo', $settingsList, '1') == '1'): ?>
     <section class="max-w-7xl mx-auto px-4 mb-14">
         <div class="bg-gradient-to-r from-bb-dark to-bb-blue rounded-2xl overflow-hidden relative">
             <div class="absolute inset-0 overflow-hidden pointer-events-none">
@@ -245,16 +253,17 @@ $categoriesWithCount = $pdo->query("
             <div class="relative z-10 p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-6">
                 <div>
                     <h3 class="text-2xl md:text-3xl font-bold text-white mb-2">
-                        🎧 Mua tai nghe — Giảm thêm <span class="text-bb-yellow">20%</span>
+                        <?= getHomeSetting('home_promo_title', $settingsList, '🎧 Mua tai nghe — Giảm thêm <span class="text-bb-yellow">20%</span>') ?>
                     </h3>
-                    <p class="text-blue-200/60 text-sm">Áp dụng cho Sony WH-1000XM5 & AirPods Pro 3. Số lượng có hạn.</p>
+                    <p class="text-blue-200/60 text-sm"><?= nl2br(htmlspecialchars(getHomeSetting('home_promo_desc', $settingsList, 'Áp dụng cho Sony WH-1000XM5 & AirPods Pro 3. Số lượng có hạn.'))) ?></p>
                 </div>
-                <a href="/danh-muc/tai-nghe" class="shrink-0 bg-bb-yellow text-bb-dark font-bold px-8 py-3 rounded-full hover:bg-yellow-300 transition-all transform hover:scale-105 shadow-lg">
-                    Xem ngay →
+                <a href="<?= htmlspecialchars(getHomeSetting('home_promo_button_link', $settingsList, '/danh-muc/tai-nghe')) ?>" class="shrink-0 bg-bb-yellow text-bb-dark font-bold px-8 py-3 rounded-full hover:bg-yellow-300 transition-all transform hover:scale-105 shadow-lg">
+                    <?= htmlspecialchars(getHomeSetting('home_promo_button_text', $settingsList, 'Xem ngay →')) ?>
                 </a>
             </div>
         </div>
     </section>
+    <?php endif; ?>
 
     <!-- ═══════════════════════════════════════
          ALL PRODUCTS — Full grid
@@ -278,6 +287,7 @@ $categoriesWithCount = $pdo->query("
     <!-- ═══════════════════════════════════════
          WHY CHOOSE US — Trust section
          ═══════════════════════════════════════ -->
+    <?php if (getHomeSetting('show_home_trust', $settingsList, '1') == '1'): ?>
     <section class="bg-white border-t border-gray-100 py-12 mb-0">
         <div class="max-w-7xl mx-auto px-4">
             <div class="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
@@ -312,5 +322,6 @@ $categoriesWithCount = $pdo->query("
             </div>
         </div>
     </section>
+    <?php endif; ?>
 
 <?php require_once __DIR__ . '/../../../includes/footer.php'; ?>

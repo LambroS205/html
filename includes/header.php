@@ -16,6 +16,10 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/helpers.php';
 
+// ── Lấy global settings ──
+$pdo = Database::getConnection();
+$globalSettings = $pdo->query("SELECT setting_key, setting_value FROM settings")->fetchAll(PDO::FETCH_KEY_PAIR);
+
 // ── Cart count từ session ──
 $cartCount = 0;
 if (!empty($_SESSION['cart'])) {
@@ -88,7 +92,7 @@ $navCategories = $pdo->query("SELECT id, name, slug, icon FROM categories ORDER 
                     Giao hàng toàn quốc
                 </span>
                 <span class="text-gray-600">|</span>
-                <span class="text-bb-yellow font-medium">🔥 Miễn phí vận chuyển đơn từ 875.000 VNĐ</span>
+                <span class="text-bb-yellow font-medium"><?= htmlspecialchars(getGlobalSetting('header_promo_text', '🔥 Miễn phí vận chuyển đơn từ 875.000 VNĐ')) ?></span>
             </div>
             <div class="flex items-center gap-4">
                 <a href="#" class="hover:text-white transition-colors">Theo dõi đơn hàng</a>
@@ -97,7 +101,7 @@ $navCategories = $pdo->query("SELECT id, name, slug, icon FROM categories ORDER 
                 <span class="text-gray-600">|</span>
                 <a href="#" class="hover:text-white transition-colors flex items-center gap-1">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
-                    1800-BESTBUY
+                    <?= htmlspecialchars(getGlobalSetting('hotline_number', '1800-BESTBUY')) ?>
                 </a>
             </div>
         </div>

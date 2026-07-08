@@ -10,8 +10,7 @@
                         <span class="text-white font-bold text-lg">Buy</span>
                     </a>
                     <p class="text-sm text-gray-400 mb-4 leading-relaxed">
-                        Cửa hàng điện tử trực tuyến hàng đầu. Cam kết sản phẩm chính hãng, 
-                        giá tốt nhất và dịch vụ hậu mãi xuất sắc.
+                        <?= nl2br(htmlspecialchars(getGlobalSetting('footer_description', 'Cửa hàng điện tử trực tuyến hàng đầu. Cam kết sản phẩm chính hãng, giá tốt nhất và dịch vụ hậu mãi xuất sắc.'))) ?>
                     </p>
                     <div class="flex gap-3">
                         <a href="#" class="w-9 h-9 rounded-full bg-gray-800 hover:bg-bb-blue flex items-center justify-center transition-colors" aria-label="Facebook">
@@ -68,7 +67,7 @@
                         </li>
                     </ul>
                     <h3 class="text-white font-semibold mb-3">Đường dây nóng</h3>
-                    <p class="text-bb-yellow font-bold text-lg">1800-BESTBUY</p>
+                    <p class="text-bb-yellow font-bold text-lg"><?= htmlspecialchars(getGlobalSetting('hotline_number', '1800-BESTBUY')) ?></p>
                     <p class="text-xs text-gray-500 mt-1">Hỗ trợ 24/7</p>
                 </div>
             </div>
@@ -77,7 +76,7 @@
         <!-- Bottom bar -->
         <div class="border-t border-gray-800">
             <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row items-center justify-between text-xs text-gray-500">
-                <p>&copy; <?= date('Y') ?> BestBuy Store Clone. Dự án học tập — Không phải trang chính thức.</p>
+                <p><?= getGlobalSetting('footer_copyright', '&copy; ' . date('Y') . ' BestBuy Store Clone. Dự án học tập — Không phải trang chính thức.') ?></p>
                 <div class="flex gap-4 mt-2 md:mt-0">
                     <a href="#" class="hover:text-gray-300 transition-colors">Điều khoản sử dụng</a>
                     <a href="#" class="hover:text-gray-300 transition-colors">Chính sách bảo mật</a>

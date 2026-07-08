@@ -247,3 +247,11 @@ function createSlug(string $str): string {
     $str = preg_replace('/[\s-]+/', '-', $str);
     return trim($str, '-');
 }
+
+/**
+ * Lấy cài đặt chung từ biến global
+ */
+function getGlobalSetting(string $key, string $default = ''): string {
+    global $globalSettings;
+    return $globalSettings[$key] ?? $default;
+}
